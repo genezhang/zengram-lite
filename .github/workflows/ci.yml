@@ -1,0 +1,40 @@
+name: CI
+
+# The compiled engine artifact is not present in this repo (fetched from a
+# release), so CI exercises only what is checkable without the wasm: shell
+# script syntax and any pure JS glue that ships with the demo. The engine-driven
+# smoke tests (demo/smoke*.mjs) need the fetched wasm and run in the
+# artifact/release verification flow, not here.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    name: Repo checks (no wasm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Fetch/build scripts are the load-bearing hand-authored surface here;
+      # a syntax error would break the "run the demo" path silently.
+      - name: shellcheck scripts
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f"
+          done
+      # Any pure JS glue tests the demo grows (none today) run here; guarded so
+      # an empty set is not a failure.
+      - name: JS glue unit tests (if any)
+        run: |
+          shopt -s nullglob
+          tests=(demo/**/*.test.mjs)
+          if [ ${#tests[@]} -gt 0 ]; then
+            node --test "${tests[@]}"
+          else
+            echo "no JS glue unit tests present — skipping"
+          fi

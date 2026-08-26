@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>zengram-lite — agent memory demo</title>
+    <style>
+      :root {
+        --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+        --text: #e6e9ef; --muted: #8b93a3; --accent: #6ea8fe; --accent2: #7ee0a2;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: var(--bg); color: var(--text);
+        display: grid; grid-template-columns: 1fr 340px; height: 100vh;
+      }
+      header { grid-column: 1 / -1; padding: 12px 20px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 12px; }
+      header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+      header .tag { font-size: 12px; color: var(--muted); }
+      #status { margin-left: auto; font-size: 12px; color: var(--muted); }
+      #status.ready { color: var(--accent2); }
+      #status.err { color: #ff6b6b; }
+      .chat { display: flex; flex-direction: column; min-height: 0; }
+      #log { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+      .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; }
+      .msg.user { align-self: flex-end; background: var(--accent); color: #0b0d12; }
+      .msg.agent { align-self: flex-start; background: var(--panel2); }
+      .msg.sys { align-self: center; color: var(--muted); font-size: 12px; background: none; padding: 2px; text-align: center; max-width: 90%; }
+      .msg .recalled { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+      form { display: flex; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--border); }
+      input[type=text] { flex: 1; background: var(--panel2); border: 1px solid var(--border);
+        color: var(--text); padding: 10px 12px; border-radius: 8px; font: inherit; }
+      button { background: var(--accent); color: #0b0d12; border: 0; padding: 10px 16px;
+        border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      aside { background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+      aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 10px; }
+      .mem { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+        padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+      .mem .subj { color: var(--accent2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+      aside .hint { font-size: 12px; color: var(--muted); margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🧠 zengram-lite</h1>
+      <span class="tag">agentic memory, in your browser</span>
+      <span id="status">loading…</span>
+    </header>
+
+    <div class="chat">
+      <div id="log">
+        <div class="msg sys">
+          A tiny agent with persistent memory. Tell it facts ("I use dark mode",
+          "I drink green tea", "I'm building a Rust project") — it embeds and
+          remembers them. Then ask questions ("what do I like?") — it recalls the
+          relevant ones by <em>meaning</em>, not keywords. Fully local: the DB is
+          Zeta compiled to wasm, and a real sentence-embedding model
+          (all-MiniLM-L6-v2) runs in this tab.
+        </div>
+      </div>
+      <form id="form">
+        <input id="input" type="text" placeholder="Tell the agent something, or ask a question…" autocomplete="off" disabled />
+        <button id="send" disabled>Send</button>
+      </form>
+    </div>
+
+    <aside>
+      <h2>Memory (this scope)</h2>
+      <div id="mems"></div>
+      <div class="hint">Each fact is embedded with a real model and stored. Questions
+        run a hybrid vector+text recall over what's stored — matching on meaning.</div>
+    </aside>
+
+    <script type="module">
+      import init, { ZengramMemory } from "./pkg-web/zengram_wasm.js";
+      import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2";
+
+      const DIM = 384;
+      const SCOPE = "browser-agent/demo";
+
+      // Allow remote model download from the HF hub (the default). Weights are
+      // cached in the browser after the first load.
+      env.allowRemoteModels = true;
+
+      const $log = document.getElementById("log");
+      const $input = document.getElementById("input");
+      const $send = document.getElementById("send");
+      const $status = document.getElementById("status");
+      const $mems = document.getElementById("mems");
+
+      function bubble(cls, text, recalled) {
+        const d = document.createElement("div");
+        d.className = "msg " + cls;
+        d.textContent = text;
+        if (recalled) {
+          const r = document.createElement("span");
+          r.className = "recalled";
+          r.textContent = recalled;
+          d.appendChild(r);
+        }
+        $log.appendChild(d);
+        $log.scrollTop = $log.scrollHeight;
+        return d;
+      }
+
+      let mem, extractor;
+      const seen = [];
+
+      // Real sentence embedding → Float32Array(384). setEmbedFn needs a SYNC
+      // callback, so we use the async model + the bring-your-own-vector API
+      // (rememberWithVector / recallWithVector).
+      async function embed(text) {
+        const out = await extractor(text, { pooling: "mean", normalize: true });
+        return new Float32Array(out.data);
+      }
+
+      // A trailing "?" is the strong signal. Absent that, only treat clear
+      // interrogatives as questions — the ambiguous starters (do/is/are/can also
+      // begin imperatives like "do remind me…") require the "?" to count.
+      function isQuestion(t) {
+        t = t.trim();
+        return /\?$/.test(t) ||
+          /^(what|who|where|when|why|which|whose|whom|how)\b/i.test(t);
+      }
+      function toFact(t) {
+        const words = t.replace(/^(i|my|the|a|an)\s+/i, "").split(/\s+/).slice(0, 3).join(" ");
+        return { subject: words || "note", content: t };
+      }
+      function refreshSidebar() {
+        $mems.innerHTML = "";
+        for (const f of seen) {
+          const d = document.createElement("div");
+          d.className = "mem";
+          d.innerHTML = `<span class="subj"></span><div class="c"></div>`;
+          d.querySelector(".subj").textContent = f.subject;
+          d.querySelector(".c").textContent = f.content;
+          $mems.appendChild(d);
+        }
+      }
+
+      async function handle(text) {
+        bubble("user", text);
+        if (isQuestion(text)) {
+          const qv = await embed(text);
+          const hits = mem.recallWithVector(text, SCOPE, qv);
+          if (!hits.length) {
+            bubble("agent", "I don't have anything relevant in memory yet. Tell me some facts first!");
+            return;
+          }
+          const top = hits.slice(0, 3);
+          const answer = "Here's what I remember that's relevant:\n" +
+            top.map((h) => `• ${h.content}`).join("\n");
+          bubble("agent", answer, "recall scores: " + top.map((h) => h.score.toFixed(2)).join(", "));
+        } else {
+          const { subject, content } = toFact(text);
+          const v = await embed(`${subject}: ${content}`);
+          mem.rememberWithVector(subject, content, SCOPE, v);
+          seen.push({ subject, content });
+          refreshSidebar();
+          bubble("agent", `Got it — I'll remember that. (stored under "${subject}")`);
+        }
+      }
+
+      (async function boot() {
+        try {
+          await init();
+          mem = ZengramMemory.open(DIM);
+          $status.textContent = "loading embedding model…";
+          extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+          $status.textContent = "ready · memory empty";
+          $status.className = "ready";
+          $input.disabled = false; $send.disabled = false;
+          $input.focus();
+        } catch (e) {
+          $status.textContent = "failed: " + (e?.message || e);
+          $status.className = "err";
+          console.error(e);
+        }
+      })();
+
+      document.getElementById("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const t = $input.value.trim();
+        if (!t || !mem) return;
+        $input.value = "";
+        $send.disabled = true; $input.disabled = true;
+        const thinking = bubble("sys", "…");
+        try {
+          await handle(t);
+        } catch (err) {
+          bubble("sys", "error: " + (err?.message || err));
+          console.error(err);
+        } finally {
+          thinking.remove();
+          $send.disabled = false; $input.disabled = false; $input.focus();
+          $status.textContent = `ready · ${seen.length} fact${seen.length === 1 ? "" : "s"} stored`;
+        }
+      });
+    </script>
+  </body>
+</html>

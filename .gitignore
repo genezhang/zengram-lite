@@ -1,0 +1,13 @@
+# Build artifacts and generated engine binary — never committed.
+# The compiled wasm is published to npm / GitHub Releases and fetched via
+# scripts/fetch-artifact.sh into demo/pkg-web/.
+demo/pkg-web/
+demo/pkg/
+
+# Node
+node_modules/
+*.log
+
+# OS / editor
+.DS_Store
+*.swp
