@@ -9,6 +9,20 @@ This is [zengram](https://github.com/genezhang/zengram)'s memory tier
 sentence-embedding model (all-MiniLM-L6-v2) running in the same tab via
 [Transformers.js](https://github.com/huggingface/transformers.js).
 
+## Two pages, one bundle
+
+zengram-lite is a **superset** — the same `.wasm` carries the full Zeta SQL engine
+alongside the memory tier. This demo folder has two pages, both loading the one
+`pkg-web/zengram_wasm.js`:
+
+- **`index.html`** — the agent-memory demo (`remember` / `recall` by meaning).
+- **`sql.html`** — a SQL playground exercising `ZetaDb` directly: DDL, bound
+  params (`$1`, `$2`), aggregates, CTEs, window functions, transactions with
+  savepoints, and JSONB. No second engine, no second download.
+
+A page that needs both memory *and* SQL imports only zengram-lite, so the engine
+loads exactly once.
+
 ## What it shows
 
 - **Semantic recall.** Ask "what UI theme do I like?" and it recalls "prefers
