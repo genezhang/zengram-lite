@@ -9,10 +9,10 @@ This is [zengram](https://github.com/genezhang/zengram)'s memory tier
 sentence-embedding model (all-MiniLM-L6-v2) running in the same tab via
 [Transformers.js](https://github.com/huggingface/transformers.js).
 
-## Two pages, one bundle
+## Three pages, one bundle
 
 zengram-lite is a **superset** — the same `.wasm` carries the full Zeta SQL engine
-alongside the memory tier. This demo folder has two pages, both loading the one
+alongside the memory tier. This demo folder has three pages, all loading the one
 `pkg-web/zengram_wasm.js`:
 
 - **`index.html`** — the agent-memory demo (`remember` / `recall` by meaning).
@@ -24,8 +24,12 @@ alongside the memory tier. This demo folder has two pages, both loading the one
   transactions). It's the same playground shipped by
   [zeta-lite](https://github.com/genezhang/zeta-lite), running on this superset
   bundle — no second engine, no second download.
+- **`agent/index.html`** — a **local AI agent** running entirely in the tab: the
+  agent loop, its tools (memory, files, web fetch), and its memory are all local;
+  only LLM inference is a remote call to an OpenAI-compatible endpoint you
+  configure. See the "Local agent" section below.
 
-A page that needs both memory *and* SQL imports only zengram-lite, so the engine
+A page that needs memory *and* SQL imports only zengram-lite, so the engine
 loads exactly once.
 
 ## What it shows
@@ -106,6 +110,51 @@ It stubs the CDN embedding model with a deterministic vector, so it runs offline
 and fast (the ops under test need no model). It **skips cleanly** (exit 0) if
 Playwright or the wasm bundle isn't present — which is why CI can run it before
 a fetchable artifact exists. Set `E2E_SHOT=out.png` to save a screenshot.
+
+## Local agent (`agent/index.html`)
+
+A working AI agent that runs **entirely in the browser tab**. The agent *loop*,
+its *tools*, and its *memory* are all local; only the language model is remote.
+
+- **Brain** — any **OpenAI-compatible** `/v1` endpoint you configure: llama.cpp
+  `llama-server` (`:8080/v1`), LM Studio (`:1234/v1`), OpenAI, or a proxy. One
+  adapter (`llm.mjs`) talks to all of them. Embeddings come from the *same*
+  endpoint (`/v1/embeddings`); the page probes the dimension at boot and opens
+  memory at it.
+- **Tools** (`tools.mjs`) — memory (`remember`/`recall`/`confirm`/`contradict`/
+  read-only `query`), files (`readFile`/`writeFile`/`listFiles`/`deleteFile` over
+  OPFS), and `webFetch`. The agent's memory and files are exactly zengram-lite +
+  OPFS — the persistence layer of a browser agent.
+- **The loop** (`agent.mjs`) — ask the model what to do, run the tools it calls,
+  feed results back, repeat until it answers. The transcript shows each tool call
+  and result inline, so you watch the agent think.
+
+Memory persists across reloads (snapshotted to OPFS each turn). The modules are
+plain JS with dependency injection, so the loop and tools are unit-tested in Node
+(`agent.test.mjs`, `tools.test.mjs`) with no wasm or network.
+
+**Run it** with a local server (no API key needed):
+
+```bash
+# 1) start an OpenAI-compatible server with a tool-calling + embedding model.
+#    llama.cpp:  llama-server -m model.gguf --embeddings --port 8080 (CORS enabled)
+#    LM Studio:  load a model, start the server, enable CORS in settings.
+# 2) serve the demo and open the agent page:
+../scripts/fetch-artifact.sh       # or build-from-source.sh — populate pkg-web/
+python3 -m http.server 8137        # from demo/
+# open http://localhost:8137/agent/index.html, set the Base URL, Connect.
+```
+
+Then: "remember that I prefer dark mode", "write a file called todo.txt with …",
+"what do you know about me?" — and watch the tool calls unfold.
+
+**Limitations** (honest): the LLM server must send **CORS** headers for this
+page's origin (llama-server needs it enabled / a CORS proxy; LM Studio has a
+toggle; OpenAI allows browser calls but then your key sits in the tab — fine for
+a local demo, not production). Small local models are unreliable at tool-calling.
+"Files" are OPFS blobs sandboxed to this origin, not your disk; `webFetch` is
+subject to the target's CORS. Switching embedding models changes the vector
+dimension and resets memory (old vectors are incompatible).
 
 ## The two embedding paths
 

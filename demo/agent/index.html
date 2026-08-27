@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- NOTE: intentionally NO Content-Security-Policy. This page's whole job is
+         to call an OpenAI-compatible LLM endpoint the user configures (localhost
+         llama.cpp / LM Studio, api.openai.com, or a proxy), which a strict
+         connect-src CSP would block. The memory demo and SQL playground keep
+         their CSP; this page trades it for configurable endpoints by design. -->
+    <title>zengram-lite — local browser agent</title>
+    <style>
+      :root {
+        --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+        --text: #e6e9ef; --muted: #8b93a3; --accent: #6ea8fe; --accent2: #7ee0a2;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: var(--bg); color: var(--text);
+        display: grid; grid-template-columns: 1fr 360px; height: 100vh;
+      }
+      header { grid-column: 1 / -1; padding: 12px 20px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+      header .tag { font-size: 12px; color: var(--muted); }
+      header a { font-size: 12px; color: var(--accent); text-decoration: none; }
+      #status { margin-left: auto; font-size: 12px; color: var(--muted); }
+      #status.ready { color: var(--accent2); }
+      #status.err { color: #ff6b6b; }
+
+      .chat { display: flex; flex-direction: column; min-height: 0; }
+      #log { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+      .msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; }
+      .msg.user { align-self: flex-end; background: var(--accent); color: #0b0d12; }
+      .msg.agent { align-self: flex-start; background: var(--panel2); }
+      .msg.sys { align-self: center; color: var(--muted); font-size: 12px; background: none; padding: 2px; text-align: center; max-width: 90%; }
+      .msg.err { align-self: center; color: #ff6b6b; font-size: 12px; background: none; text-align: center; max-width: 90%; }
+
+      /* A tool step: collapsible, shows the mechanism. */
+      details.step { align-self: flex-start; max-width: 80%; background: var(--panel2);
+        border: 1px solid var(--border); border-radius: 10px; font-size: 13px; padding: 4px 10px; }
+      details.step > summary { cursor: pointer; color: var(--accent2); font-variant-numeric: tabular-nums; list-style: none; }
+      details.step > summary::-webkit-details-marker { display: none; }
+      details.step .body { margin-top: 6px; }
+      details.step pre { margin: 4px 0; padding: 8px; background: var(--panel); border-radius: 6px;
+        overflow-x: auto; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+      details.step .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+      .divider { align-self: stretch; text-align: center; color: var(--muted); font-size: 11px; opacity: 0.6; }
+
+      form { display: flex; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--border); }
+      input[type=text] { flex: 1; background: var(--panel2); border: 1px solid var(--border);
+        color: var(--text); padding: 10px 12px; border-radius: 8px; font: inherit; }
+      button { background: var(--accent); color: #0b0d12; border: 0; padding: 10px 16px;
+        border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+
+      aside { background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+      aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 16px 0 10px; }
+      aside h2:first-child { margin-top: 0; }
+
+      /* Config panel */
+      .cfg { display: grid; gap: 8px; }
+      .cfg label { font-size: 11px; color: var(--muted); display: grid; gap: 3px; }
+      .cfg input, .cfg select { background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+        padding: 7px 9px; border-radius: 6px; font: inherit; font-size: 13px; }
+      .cfg .row { display: flex; gap: 8px; align-items: center; }
+      .cfg button { padding: 7px 12px; font-size: 13px; }
+
+      .mem { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+        padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+      .mem .subj { color: var(--accent2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+      .mem .meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+      .mem .bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+      .mem .bar > span { display: block; height: 100%; background: var(--accent); }
+      .mem .num { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .file { display: flex; justify-content: space-between; align-items: center; background: var(--panel2);
+        border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; margin-bottom: 6px; font-size: 13px; }
+      .file .name { cursor: pointer; color: var(--accent); }
+      .file .del { cursor: pointer; color: var(--muted); font-size: 12px; }
+      aside .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+      aside .apihint { font-size: 11px; color: var(--muted); margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🤖 zengram-lite</h1>
+      <span class="tag">a whole agent in this tab — only inference is remote</span>
+      <a href="../index.html">← memory demo</a>
+      <a href="../playground/index.html">SQL playground →</a>
+      <span id="status">loading…</span>
+    </header>
+
+    <div class="chat">
+      <div id="log">
+        <div class="msg sys">
+          A local AI agent running entirely in this browser tab. The agent
+          <em>loop</em>, its <em>tools</em> (memory, files, web fetch), and its
+          <em>memory</em> are all here; only the language model is remote — any
+          OpenAI-compatible endpoint you point it at (llama.cpp, LM Studio,
+          OpenAI, a proxy). Configure the endpoint in the sidebar, then tell it
+          to remember things, recall them, or write a file — and watch the tool
+          calls unfold.
+        </div>
+      </div>
+      <form id="form">
+        <input id="input" type="text" placeholder="Ask the agent to do something…" autocomplete="off" disabled />
+        <button id="send" disabled>Send</button>
+      </form>
+    </div>
+
+    <aside>
+      <h2>LLM endpoint</h2>
+      <div class="cfg">
+        <label>Preset
+          <select id="preset">
+            <option value="">— pick a preset —</option>
+            <option value="llama.cpp">llama.cpp (:8080)</option>
+            <option value="LM Studio">LM Studio (:1234)</option>
+            <option value="OpenAI">OpenAI</option>
+          </select>
+        </label>
+        <label>Base URL <input id="baseUrl" type="text" placeholder="http://localhost:8080/v1" /></label>
+        <label>Chat model <input id="model" type="text" placeholder="local-model" /></label>
+        <label>Embed model <input id="embedModel" type="text" placeholder="local-embed" /></label>
+        <label>API key (optional) <input id="apiKey" type="password" placeholder="sk-… (blank for local)" /></label>
+        <div class="row"><button id="connect">Connect</button><span id="cfgmsg" class="hint"></span></div>
+      </div>
+
+      <h2>Memory</h2>
+      <div id="mems"></div>
+
+      <h2>Files</h2>
+      <div id="files"></div>
+
+      <div class="apihint">Tools: remember / recall / confirm / contradict / query
+        (memory) · readFile / writeFile / listFiles / deleteFile (OPFS) · webFetch.
+        The agent loop is <b>agent.mjs</b>; tools are <b>tools.mjs</b>.</div>
+    </aside>
+
+    <script type="module">
+      import init, { ZengramMemory } from "../pkg-web/zengram_wasm.js";
+      import { makeLLM, DEFAULT_CONFIG, PRESETS } from "./llm.mjs";
+      import { makeTools } from "./tools.mjs";
+      import { runAgent, newHistory } from "./agent.mjs";
+      import * as opfs from "./opfs.mjs";
+
+      const SCOPE = "browser-agent/agent";
+      const SNAPSHOT = "agent-mem.zeta";
+      const DIM_FILE = "agent-mem.dim";
+      const CFG_KEY = "zengram.agent.config";
+
+      const $ = (id) => document.getElementById(id);
+      const $log = $("log"), $input = $("input"), $send = $("send"), $status = $("status");
+      const $mems = $("mems"), $files = $("files"), $cfgmsg = $("cfgmsg");
+
+      let mem = null, llm = null, tools = null, history = null;
+      let opfsOk = true; // false → run in-memory, files disabled
+
+      // ── config persistence ────────────────────────────────────────────────
+      function loadConfig() {
+        try {
+          const raw = localStorage.getItem(CFG_KEY);
+          if (raw) return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+        } catch { /* ignore */ }
+        return { ...DEFAULT_CONFIG };
+      }
+      function saveConfig(cfg) {
+        try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch { /* ignore */ }
+      }
+      function readConfigForm() {
+        return {
+          baseUrl: $("baseUrl").value.trim() || DEFAULT_CONFIG.baseUrl,
+          model: $("model").value.trim() || DEFAULT_CONFIG.model,
+          embedModel: $("embedModel").value.trim() || DEFAULT_CONFIG.embedModel,
+          apiKey: $("apiKey").value,
+        };
+      }
+      function fillConfigForm(cfg) {
+        $("baseUrl").value = cfg.baseUrl; $("model").value = cfg.model;
+        $("embedModel").value = cfg.embedModel; $("apiKey").value = cfg.apiKey || "";
+      }
+
+      // ── transcript rendering ──────────────────────────────────────────────
+      function bubble(cls, text) {
+        const d = document.createElement("div");
+        d.className = "msg " + cls;
+        d.textContent = text;
+        $log.appendChild(d);
+        $log.scrollTop = $log.scrollHeight;
+        return d;
+      }
+      const stepNodes = new Map(); // call.id → details element
+      function onEvent(evt) {
+        if (evt.type === "assistant-text") {
+          if (evt.text) bubble("agent", evt.text);
+        } else if (evt.type === "tool-call") {
+          const d = document.createElement("details");
+          d.className = "step";
+          d.open = true; // show the mechanism on the first turn
+          const argStr = evt.args ? JSON.stringify(evt.args) : evt.raw || "{}";
+          d.innerHTML =
+            `<summary>🔧 ${escapeHtml(String(evt.name))}(${escapeHtml(truncate(argStr, 60))})</summary>` +
+            `<div class="body"><div class="lbl">arguments</div><pre></pre>` +
+            `<div class="lbl">result</div><pre class="res">…running…</pre></div>`;
+          d.querySelector("pre").textContent = pretty(evt.args ?? evt.raw);
+          $log.appendChild(d);
+          $log.scrollTop = $log.scrollHeight;
+          stepNodes.set(evt.id, d);
+        } else if (evt.type === "tool-result") {
+          const d = stepNodes.get(evt.id);
+          if (d) d.querySelector(".res").textContent = truncate(evt.text, 2000);
+        } else if (evt.type === "error") {
+          bubble("err", evt.message);
+        }
+      }
+      function pretty(v) { try { return JSON.stringify(v, null, 2); } catch { return String(v); } }
+      function truncate(s, n) { s = String(s); return s.length > n ? s.slice(0, n) + "…" : s; }
+      function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+      // ── sidebar ───────────────────────────────────────────────────────────
+      function refreshMemory() {
+        $mems.innerHTML = "";
+        if (!mem) return;
+        let rows = [];
+        try {
+          rows = mem.query(
+            `SELECT id, subject, content, confidence, importance
+             FROM knowledge WHERE scope = $1 AND status = 'active'
+             ORDER BY importance DESC, time_updated DESC`,
+            [SCOPE],
+          ).rows;
+        } catch { /* ignore */ }
+        if (!rows.length) { $mems.innerHTML = '<div class="hint">No memories yet.</div>'; return; }
+        for (const f of rows) {
+          const conf = Number(f.confidence) || 0, imp = Number(f.importance) || 0;
+          const d = document.createElement("div");
+          d.className = "mem";
+          d.innerHTML =
+            `<span class="subj"></span><div class="c"></div>` +
+            `<div class="meta"><span class="num">conf</span><div class="bar"><span style="width:${Math.round(conf * 100)}%"></span></div><span class="num cval"></span></div>` +
+            `<div class="meta"><span class="num">imp&nbsp;</span><div class="bar"><span style="width:${Math.round(imp * 100)}%;background:var(--accent2)"></span></div><span class="num ival"></span></div>`;
+          d.querySelector(".subj").textContent = f.subject;
+          d.querySelector(".c").textContent = f.content;
+          d.querySelector(".cval").textContent = conf.toFixed(2);
+          d.querySelector(".ival").textContent = imp.toFixed(2);
+          $mems.appendChild(d);
+        }
+      }
+      async function refreshFiles() {
+        $files.innerHTML = "";
+        if (!opfsOk) { $files.innerHTML = '<div class="hint">OPFS unavailable — files disabled.</div>'; return; }
+        let names = [];
+        try {
+          names = (await opfs.listFiles()).filter((n) => n.startsWith("agentfile__")).map((n) => n.slice(11));
+        } catch { /* ignore */ }
+        if (!names.length) { $files.innerHTML = '<div class="hint">No files yet.</div>'; return; }
+        for (const name of names) {
+          const row = document.createElement("div");
+          row.className = "file";
+          row.innerHTML = `<span class="name"></span><span class="del">✕</span>`;
+          row.querySelector(".name").textContent = name;
+          row.querySelector(".name").addEventListener("click", async () => {
+            const t = await opfs.readFileText("agentfile__" + name);
+            bubble("sys", `📄 ${name}:\n` + (t ?? "(empty)"));
+          });
+          row.querySelector(".del").addEventListener("click", async () => {
+            await opfs.deleteFromOpfs("agentfile__" + name); refreshFiles();
+          });
+          $files.appendChild(row);
+        }
+      }
+
+      // ── memory open / persist ─────────────────────────────────────────────
+      async function openMemory(dim) {
+        if (!opfsOk) return ZengramMemory.open(dim);
+        let storedDim = null, bytes = null;
+        try {
+          const d = await opfs.readFileText(DIM_FILE);
+          storedDim = d ? parseInt(d, 10) : null;
+          bytes = await opfs.loadFromOpfs(SNAPSHOT);
+        } catch { opfsOk = false; return ZengramMemory.open(dim); }
+
+        if (bytes && storedDim === dim) {
+          return ZengramMemory.openFromSnapshot(bytes, dim);
+        }
+        if (bytes && storedDim !== dim) {
+          // Embedding model changed → old vectors are the wrong dimension. Reset.
+          bubble("sys", `Embedding dimension changed (${storedDim} → ${dim}); memory reset.`);
+          try { await opfs.deleteFromOpfs(SNAPSHOT); } catch { /* ignore */ }
+        }
+        const m = ZengramMemory.open(dim);
+        try { await opfs.writeFileText(DIM_FILE, String(dim)); } catch { /* ignore */ }
+        return m;
+      }
+      async function persist() {
+        if (!opfsOk || !mem) return;
+        try { await opfs.saveToOpfs(SNAPSHOT, mem.exportSnapshot()); } catch { /* ignore */ }
+      }
+
+      // ── connect / boot ────────────────────────────────────────────────────
+      async function connect() {
+        const cfg = readConfigForm();
+        saveConfig(cfg);
+        $status.textContent = "connecting…"; $status.className = "";
+        $cfgmsg.textContent = "";
+        $input.disabled = true; $send.disabled = true;
+        try {
+          llm = makeLLM(cfg);
+          const dim = await llm.probeEmbedDim();
+          mem = await openMemory(dim);
+          tools = makeTools({ mem, scope: SCOPE, embed: llm.embed, opfs, fetchImpl: window.fetch.bind(window) });
+          history = newHistory();
+          refreshMemory(); await refreshFiles();
+          $status.textContent = `ready · embed dim ${dim}`; $status.className = "ready";
+          $input.disabled = false; $send.disabled = false; $input.focus();
+          $cfgmsg.textContent = "connected";
+        } catch (e) {
+          $status.textContent = "not connected"; $status.className = "err";
+          $cfgmsg.textContent = "";
+          bubble("err", (e && e.message) ? e.message : String(e));
+        }
+      }
+
+      async function handleSubmit(text) {
+        const thinking = bubble("sys", "…thinking");
+        $send.disabled = true; $input.disabled = true;
+        try {
+          await runAgent(text, { llm, tools, history, onEvent });
+        } catch (e) {
+          bubble("err", "agent error: " + ((e && e.message) || e));
+        } finally {
+          thinking.remove();
+          await persist();
+          refreshMemory(); await refreshFiles();
+          $send.disabled = false; $input.disabled = false; $input.focus();
+        }
+      }
+
+      // ── wire up ───────────────────────────────────────────────────────────
+      $("preset").addEventListener("change", (e) => {
+        const p = e.target.value;
+        if (p && PRESETS[p]) $("baseUrl").value = PRESETS[p];
+      });
+      $("connect").addEventListener("click", (e) => { e.preventDefault(); connect(); });
+      $("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const t = $input.value.trim();
+        if (!t || !tools) return;
+        $input.value = "";
+        bubble("user", t);
+        await handleSubmit(t);
+      });
+
+      (async function boot() {
+        try {
+          await init();
+        } catch (e) {
+          $status.textContent = "wasm failed: " + ((e && e.message) || e); $status.className = "err";
+          return;
+        }
+        // OPFS probe (absent under file:// or in a non-OPFS browser).
+        try { await opfs.listFiles(); } catch { opfsOk = false; }
+        fillConfigForm(loadConfig());
+        $status.textContent = "configure an endpoint →";
+        // Auto-connect if a config was saved from a previous session.
+        if (localStorage.getItem(CFG_KEY)) connect();
+      })();
+    </script>
+  </body>
+</html>

@@ -21,9 +21,11 @@ fully client-side, no server, no network.
 
 ## What's in this repo
 
-- `demo/` — a tiny browser agent that remembers facts you tell it and recalls
-  them by meaning (hand-authored HTML + JS). `demo/pkg-web/` is **gitignored** —
-  the compiled `.wasm` is fetched, not committed.
+- `demo/` — three hand-authored browser pages on one wasm bundle: an
+  **agent-memory** demo (remember/recall by meaning), a full **SQL playground**,
+  and a **local AI agent** whose loop, tools, and memory all run in the tab (only
+  LLM inference is a remote OpenAI-compatible call). `demo/pkg-web/` is
+  **gitignored** — the compiled `.wasm` is fetched, not committed.
 - `scripts/` — `fetch-artifact.sh` (pull the published wasm) and
   `build-from-source.sh` (rebuild from the monorepo; maintainers only).
 - `docs/` — engine modes and preview notes.

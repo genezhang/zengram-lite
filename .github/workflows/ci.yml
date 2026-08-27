@@ -45,9 +45,12 @@ jobs:
       # still syntax-check it and run it, so the moment a fetchable artifact
       # exists the browser coverage turns on with no workflow change.
       - name: E2E script syntax
-        run: node --check demo/e2e_ops.mjs
+        run: |
+          node --check demo/e2e_ops.mjs
+          node --check demo/agent/e2e_agent.mjs
       - name: Headless E2E (skips without wasm)
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
           npm run e2e
+          npm run e2e:agent
