@@ -95,6 +95,26 @@ One wasm heap, one database — your SQL tables and the agent's memory in the sa
 catalog. In shared mode, avoid app table names that collide with memory's
 reserved names (see the engine-modes doc).
 
+## Deterministic memory ops (no model needed)
+
+Beyond `remember`/`recall`, a few operations are pure database work — no embedder
+or completion model — so they run anywhere, even before you wire a model:
+
+```js
+mem.confirm(knowledgeId);          // saw this again → raise its confidence
+mem.contradict(knowledgeId);       // this was wrong → lower its confidence
+const n = mem.decay(30);           // half-life (days): let stale facts fade; returns count updated
+const facts = mem.factsAboutPeer("peer-dana", 10);  // facts attributed to a peer, most important first
+
+// Escape hatch: raw SQL over the memory database, same shape as ZetaDb.query
+const r = mem.query("SELECT subject, content FROM knowledge WHERE scope = $1", ["agent/session-42"]);
+// r = { columns: [...], rows: [{ subject, content }, …] }
+```
+
+`query` runs any statement ($1/$2 positional binds); a write takes effect but
+returns an empty `rows` array. Use the typed methods above for mutation — writing
+memory's own tables directly can break the tier's invariants.
+
 ## zeta-lite vs zengram-lite
 
 - Import **[zeta-lite](https://github.com/genezhang/zeta-lite)** for SQL-only
@@ -117,9 +137,10 @@ const mem2 = ZengramMemory.openFromSnapshot(blob, 384);
 
 ## Status & limitations
 
-v0.1 preview. In-memory engine; durability is snapshot-based. Fact-extraction and
-reflection are stubs pending a completion-model callback; embed + recall are
-fully wired. Single database per engine.
+v0.1 preview. In-memory engine; durability is snapshot-based. Embed, recall, and
+the deterministic ops (confirm/contradict/decay/factsAboutPeer/query) are fully
+wired; automatic fact-extraction and reflection are stubs pending a
+completion-model callback. Single database per engine.
 
 ## License
 
