@@ -39,3 +39,15 @@ jobs:
           else
             echo "no JS glue unit tests present — skipping"
           fi
+      # The headless E2E (demo/e2e_ops.mjs) drives the real page in Chromium. It
+      # needs the wasm bundle, which this repo fetches from a release and CI does
+      # not have — so the script self-skips (exit 0) when pkg-web/ is absent. We
+      # still syntax-check it and run it, so the moment a fetchable artifact
+      # exists the browser coverage turns on with no workflow change.
+      - name: E2E script syntax
+        run: node --check demo/e2e_ops.mjs
+      - name: Headless E2E (skips without wasm)
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npm run e2e
