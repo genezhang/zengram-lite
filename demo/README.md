@@ -134,27 +134,126 @@ Memory persists across reloads (snapshotted to OPFS each turn). The modules are
 plain JS with dependency injection, so the loop and tools are unit-tested in Node
 (`agent.test.mjs`, `tools.test.mjs`) with no wasm or network.
 
-**Run it** with a local server (no API key needed):
+## Try it: a 5-minute walkthrough
+
+### 1. Start a local LLM (two llama.cpp servers)
+
+The agent needs **two** models: a chat/tool-calling model (the brain) and an
+embedding model (for memory vectors). LM Studio and OpenAI serve both from one
+endpoint; **llama.cpp** loads one model per process, so run two `llama-server`
+processes on two ports:
 
 ```bash
-# 1) start an OpenAI-compatible server with a tool-calling + embedding model.
-#    LM Studio:  load a chat model, start the server, enable CORS in settings —
-#                it serves /v1/chat/completions AND /v1/embeddings from one port.
-#    llama.cpp:  ONE llama-server loads ONE model, and a chat model can't serve
-#                embeddings, so run two processes on two ports:
-#      llama-server -m chat.gguf              --port 8080   # chat
-#      llama-server -m nomic-embed.gguf --embeddings --port 8081   # embeddings
-#                then set Base URL = :8080/v1 and Embed base URL = :8081/v1.
-# 2) serve the demo and open the agent page:
-../scripts/fetch-artifact.sh       # or build-from-source.sh — populate pkg-web/
-python3 -m http.server 8137        # from demo/
-# open http://localhost:8137/agent/index.html, set the Base URL, Connect.
+# terminal 1 — chat / tool-calling model on :8080
+llama-server -m ~/models/Qwen3-8B-Q4_K_M.gguf \
+  --port 8080 --jinja                 # --jinja drives the model's chat template
+                                      # (tool-call parsing); default-on in recent
+                                      # builds, pass it to be sure
+
+# terminal 2 — embedding model on :8081
+llama-server -m ~/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
+  --embeddings --port 8081
 ```
 
-Then: "remember that I prefer dark mode", "write a file called todo.txt with …",
-"what do you know about me?" — and watch the tool calls unfold.
+Notes:
+- **CORS**: recent `llama-server` builds default `--cors-origins '*'`, so the
+  browser can call them as-is. If Connect fails with "Could not reach…", add
+  `--cors-origins '*'` to both.
+- **Tool-calling**: `--jinja` makes the chat server apply the model's Jinja chat
+  template so it emits OpenAI `tool_calls` (it's default-on in recent builds). A
+  capable chat model (7B+ instruct, e.g. Qwen3) is far more reliable at
+  tool-calling than a tiny one.
+- **Models**: get GGUFs from Hugging Face — search e.g. `Qwen3-8B-GGUF` and
+  `Qwen3-Embedding-0.6B-GGUF`. Any OpenAI-compatible chat + embedding pair works
+  (nomic-embed-text, bge-*, all-MiniLM, …); the page probes the embed dimension
+  at boot, so you don't hard-code it.
 
-**Limitations** (honest): the LLM server must send **CORS** headers for this
+`llama-server` is [llama.cpp](https://github.com/ggml-org/llama.cpp)'s built-in
+server. LM Studio users: load a chat model, enable the server + CORS, and leave
+**Embed base URL** blank (one endpoint serves both).
+
+### 2. Serve the demo and open the agent
+
+The page must be served over HTTP (ES modules + OPFS don't work from `file://`):
+
+```bash
+../scripts/fetch-artifact.sh    # or build-from-source.sh — populate pkg-web/
+python3 -m http.server 8137     # run from the demo/ directory
+```
+
+Open **http://localhost:8137/agent/index.html**.
+
+### 3. Connect
+
+In the sidebar's **LLM endpoint** panel:
+
+| Field           | Value                        |
+| --------------- | ---------------------------- |
+| Base URL        | `http://localhost:8080/v1`   |
+| Chat model      | `local-model` (llama.cpp serves its one loaded model regardless of name) |
+| Embed model     | `local-embed`                |
+| Embed base URL  | `http://localhost:8081/v1` ← the two-server field |
+| API key         | *(blank for local)*          |
+
+Click **Connect**. The status turns green: `ready · embed dim 1024` (or whatever
+your embed model's dimension is — that number confirms the probe worked).
+
+### 4. Test memory + embeddings
+
+Store a few facts (each renders a `🔧 remember(...)` step and a sidebar card):
+
+> remember that I prefer dark mode in my editor
+> remember that I drink green tea every morning
+> remember that my favorite language is Rust
+
+Now recall by **meaning** — ask questions that share **no keywords** with what you
+stored. If it still finds them, that's real vector search, not text matching:
+
+> what hot beverage do I like?        → recalls the green-tea fact
+> what are my UI preferences?         → recalls dark mode
+> which language do I code in?        → recalls Rust
+
+Then probe for a fact you never stored — a good agent says it doesn't know rather
+than inventing one (recall returned only low-similarity hits):
+
+> what car do I drive?
+
+Expand a `🔧 recall(...)` step to see the ranked hits with `[id=…, score=0.xx]` —
+those scores are the embedding similarities. Tell it a recalled fact is right or
+wrong and it calls `confirm(id)` / `contradict(id)`, nudging the confidence bar.
+
+### 5. Persistence — memory survives a full shutdown
+
+**After every turn**, the agent snapshots its memory to an OPFS file
+(`agent-mem.zeta`) — see `persist()` in `index.html`. This is incremental, *not* a
+save-on-exit hook: even a crash or force-quit loses at most the in-flight turn,
+never your stored facts. To see it:
+
+1. Store a few facts.
+2. **Fully quit the browser** (not just the tab).
+3. Reopen **http://localhost:8137/agent/index.html** → the sidebar repopulates;
+   ask *"what do you know about me?"* and it recalls everything.
+
+Caveat: OPFS is **origin-scoped** browser storage. Same URL (scheme + host +
+port) → your memory is there. A different port, a different browser/profile, or
+"clear site data" starts fresh. It's sandboxed browser storage, not a file on
+disk — though `exportSnapshot()` hands you the bytes if you want to keep a copy.
+
+### 6. Web fetch — a browser reality
+
+`webFetch` runs *in the tab*, so it's a cross-origin request bound by the target
+site's CORS policy:
+
+- **Public, CORS-enabled APIs work first try** — e.g.
+  *"fetch https://api.github.com/repos/ggml-org/llama.cpp and tell me the description"*.
+- **Most websites send no CORS headers** → the browser blocks the response and no
+  retry helps. Reading arbitrary sites needs a local CORS proxy (not built in).
+- **Private/authenticated URLs 404 or 401** — e.g. a private GitHub repo returns
+  404 to an anonymous browser call (by design; we don't put a token in the tab).
+
+A well-behaved model treats these errors as feedback and adapts — you'll see it
+switch URLs or give up gracefully rather than crash.
+
 page's origin (llama-server needs it enabled / a CORS proxy; LM Studio has a
 toggle; OpenAI allows browser calls but then your key sits in the tab — fine for
 a local demo, not production). Small local models are unreliable at tool-calling.
