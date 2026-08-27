@@ -123,6 +123,8 @@
         <label>Base URL <input id="baseUrl" type="text" placeholder="http://localhost:8080/v1" /></label>
         <label>Chat model <input id="model" type="text" placeholder="local-model" /></label>
         <label>Embed model <input id="embedModel" type="text" placeholder="local-embed" /></label>
+        <label>Embed base URL (optional)
+          <input id="embedBaseUrl" type="text" placeholder="blank = same server; e.g. http://localhost:8081/v1" /></label>
         <label>API key (optional) <input id="apiKey" type="password" placeholder="sk-… (blank for local)" /></label>
         <div class="row"><button id="connect">Connect</button><span id="cfgmsg" class="hint"></span></div>
       </div>
@@ -173,12 +175,15 @@
           baseUrl: $("baseUrl").value.trim() || DEFAULT_CONFIG.baseUrl,
           model: $("model").value.trim() || DEFAULT_CONFIG.model,
           embedModel: $("embedModel").value.trim() || DEFAULT_CONFIG.embedModel,
+          embedBaseUrl: $("embedBaseUrl").value.trim(),
           apiKey: $("apiKey").value,
         };
       }
       function fillConfigForm(cfg) {
         $("baseUrl").value = cfg.baseUrl; $("model").value = cfg.model;
-        $("embedModel").value = cfg.embedModel; $("apiKey").value = cfg.apiKey || "";
+        $("embedModel").value = cfg.embedModel;
+        $("embedBaseUrl").value = cfg.embedBaseUrl || "";
+        $("apiKey").value = cfg.apiKey || "";
       }
 
       // ── transcript rendering ──────────────────────────────────────────────

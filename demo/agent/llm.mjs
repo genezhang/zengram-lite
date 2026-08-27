@@ -6,8 +6,13 @@
 // call out to — where the matrix multiply happens is the host's business.
 //
 // Two operations: chat() (reasoning + tool-calling) and embed() (for memory
-// vectors), both against the SAME endpoint. probeEmbedDim() reads the embedding
-// dimension once at boot so memory opens at the model's dimension.
+// vectors). LM Studio and the hosted APIs serve both from one endpoint, so
+// embed defaults to the chat base URL. But one llama.cpp `llama-server` process
+// loads exactly ONE model and a chat model can't serve embeddings — so that
+// setup runs a second `llama-server --embeddings` on another port. Set
+// `embedBaseUrl` to point embed at that second server; leave it blank to reuse
+// the chat endpoint. probeEmbedDim() reads the embedding dimension once at boot
+// so memory opens at the model's dimension.
 
 /** Strip a trailing slash so `${baseUrl}/chat/completions` never doubles up. */
 function normBase(u) {
@@ -52,11 +57,15 @@ async function httpError(res) {
  * Build an adapter from a config object. `fetchImpl` is injectable so this
  * module unit-tests in Node with a fake fetch (no network).
  *
- * @param {{baseUrl:string, model:string, embedModel:string, apiKey?:string}} config
+ * @param {{baseUrl:string, model:string, embedModel:string, embedBaseUrl?:string, apiKey?:string}} config
  * @param {typeof fetch} [fetchImpl]
  */
 export function makeLLM(config, fetchImpl = globalThis.fetch) {
   const base = normBase(config.baseUrl);
+  // Embeddings default to the chat endpoint (LM Studio / OpenAI serve both);
+  // a non-empty embedBaseUrl routes them to a separate server (llama.cpp's
+  // dedicated `llama-server --embeddings` on another port).
+  const embedBase = config.embedBaseUrl ? normBase(config.embedBaseUrl) : base;
 
   async function chat(messages, tools) {
     let res;
@@ -84,13 +93,13 @@ export function makeLLM(config, fetchImpl = globalThis.fetch) {
   async function embed(text) {
     let res;
     try {
-      res = await fetchImpl(base + "/embeddings", {
+      res = await fetchImpl(embedBase + "/embeddings", {
         method: "POST",
         headers: authHeaders(config),
         body: JSON.stringify({ model: config.embedModel, input: text }),
       });
     } catch (e) {
-      throw networkError(base, e);
+      throw networkError(embedBase, e);
     }
     if (!res.ok) throw await httpError(res);
     const data = await res.json();
@@ -104,7 +113,12 @@ export function makeLLM(config, fetchImpl = globalThis.fetch) {
     return (await embed("dimension probe")).length;
   }
 
-  return { chat, embed, probeEmbedDim, config: { ...config, baseUrl: base } };
+  return {
+    chat,
+    embed,
+    probeEmbedDim,
+    config: { ...config, baseUrl: base, embedBaseUrl: embedBase },
+  };
 }
 
 /** Presets for the common OpenAI-compatible servers. */
@@ -118,6 +132,7 @@ export const DEFAULT_CONFIG = {
   baseUrl: "http://localhost:8080/v1",
   model: "local-model",
   embedModel: "local-embed",
+  embedBaseUrl: "", // blank → embed reuses baseUrl; set for a separate embed server
   apiKey: "",
 };
 
