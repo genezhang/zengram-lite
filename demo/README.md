@@ -32,6 +32,10 @@ loads exactly once.
 
 - **Semantic recall.** Ask "what UI theme do I like?" and it recalls "prefers
   dark mode" — zero shared keywords. Real embeddings, real vector search.
+- **Deterministic memory ops, live.** The sidebar is built from `mem.query()`
+  (raw SQL over the `knowledge` table); 👍/👎 on each fact call `confirm(id)` /
+  `contradict(id)` and the confidence/importance bars move, and **Decay** calls
+  `decay(halfLifeDays)`. All no-model, no-embedder — pure database work.
 - **Fully local.** The database (Zeta), the vector index (HNSW), and the
   embedding model all run in the browser. Nothing leaves the tab.
 - **Concurrent-SI transactional store** underneath — the same engine as the
@@ -84,6 +88,24 @@ npm install @huggingface/transformers && node smoke_model.mjs   # real model (ve
 
 `smoke_model.mjs` proves real semantic recall — queries with **zero keyword
 overlap** with the stored facts still retrieve the right ones.
+
+## Headless browser E2E (Playwright)
+
+`e2e_ops.mjs` drives the **real page** in headless Chromium — the DOM path the
+Node smokes can't reach. It types facts into the form, clicks 👍/👎
+(`confirm`/`contradict`) and **Decay**, and asserts the confidence bars move.
+
+```bash
+npm install                        # installs playwright (devDependency)
+npx playwright install chromium
+../scripts/fetch-artifact.sh       # populate pkg-web/ (or build-from-source.sh)
+npm run e2e                        # from the repo root  (or: node e2e_ops.mjs here)
+```
+
+It stubs the CDN embedding model with a deterministic vector, so it runs offline
+and fast (the ops under test need no model). It **skips cleanly** (exit 0) if
+Playwright or the wasm bundle isn't present — which is why CI can run it before
+a fetchable artifact exists. Set `E2E_SHOT=out.png` to save a screenshot.
 
 ## The two embedding paths
 

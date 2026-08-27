@@ -8,6 +8,9 @@ demo/pkg/
 node_modules/
 *.log
 
+# E2E screenshots (opt-in via E2E_SHOT=path)
+demo/*.png
+
 # OS / editor
 .DS_Store
 *.swp
