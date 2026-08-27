@@ -1,0 +1,1485 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Content-Security-Policy: defense-in-depth for the SQL console. The page is
+       fully self-contained — same-origin ES modules + a same-origin .wasm, one
+       inline <style> (design tokens) and one inline <script type=module>, and no
+       external resource loads (the only off-origin URL is a GitHub <a href>,
+       which navigation, not a fetch, so needs no allowance). So we can lock
+       nearly everything to 'self':
+         - script-src adds 'wasm-unsafe-eval' (WebAssembly.instantiate needs it)
+           and 'unsafe-inline' for the single inline module block. ('unsafe-inline'
+           is ignored by browsers whenever a nonce/hash is present; we use neither,
+           so it applies — a hash would be stricter but breaks on every edit.)
+         - style-src allows 'unsafe-inline' for the inline <style> and the
+           editor's runtime-injected styles (CodeMirror prefers adoptedStyleSheets,
+           falling back to a <style> tag).
+         - connect-src 'self' covers the wasm fetch and OPFS; no network egress.
+         - object-src/base-uri 'none' blunt injection (no plugins, no <base> hijack).
+       This neutralizes any residual HTML-injection: even if a sink regressed,
+       an injected <script> or remote src would be refused.
+
+       NOTE: frame-ancestors and form-action are included below but a browser
+       HONORS THEM ONLY WHEN CSP ARRIVES AS AN HTTP HEADER — they are ignored in
+       a <meta> policy. So the anti-clickjacking protection is NOT actually in
+       effect under the plain `python3 -m http.server` dev flow (which sends no
+       headers); it takes effect only when the page is hosted somewhere that
+       emits the CSP (or X-Frame-Options) as a response header. They are kept
+       here so a header-emitting host gets them for free, not as a live guard. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data:;
+    connect-src 'self';
+    font-src 'self';
+    object-src 'none';
+    base-uri 'none';
+    frame-ancestors 'none';
+    form-action 'none'
+  " />
+  <title>zengram-lite — in-browser SQL playground</title>
+  <style>
+    /* ─── Design tokens ────────────────────────────────────────────────────
+       Palette: a cool slate neutral (bias toward blue, never a flat grey) with
+       one confident amber accent (the "zeta spark"), plus separate semantic
+       colors. Full light set on :root; dark redefines tokens under both the
+       system media query (guarded so an explicit light choice wins) and the
+       explicit [data-theme="dark"] stamp. Everything below styles through
+       these tokens — no bare colors inside media/[data-theme] blocks. */
+    :root {
+      --bg:        #f4f6f9;
+      --surface:   #ffffff;
+      --surface-2: #eef1f6;
+      --border:    #d6dce6;
+      --border-strong: #b9c2d0;
+      --text:      #1b2431;
+      --text-dim:  #5a6675;
+      --text-faint:#8b96a6;
+      --accent:    #b5730f;   /* amber, on light */
+      --accent-ink:#ffffff;
+      --accent-soft:#fbedd6;
+      --good:      #2f7d4f;
+      --warn:      #9a6b00;
+      --crit:      #b5362b;
+      --crit-soft: #fbe7e4;
+      --shadow:    0 1px 2px rgba(27, 36, 49, .06), 0 4px 16px rgba(27, 36, 49, .06);
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --radius: 8px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg:        #0e1420;
+        --surface:   #151d2b;
+        --surface-2: #1c2637;
+        --border:    #283449;
+        --border-strong: #3a4a64;
+        --text:      #e6ecf5;
+        --text-dim:  #9fabbd;
+        --text-faint:#6c7a90;
+        --accent:    #f0b354;   /* amber, on dark */
+        --accent-ink:#1b1204;
+        --accent-soft:#2e2513;
+        --good:      #5fd39a;
+        --warn:      #e9c26a;
+        --crit:      #ff8a7a;
+        --crit-soft: #331f1c;
+        --shadow:    0 1px 2px rgba(0, 0, 0, .3), 0 6px 24px rgba(0, 0, 0, .35);
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg:        #0e1420;
+      --surface:   #151d2b;
+      --surface-2: #1c2637;
+      --border:    #283449;
+      --border-strong: #3a4a64;
+      --text:      #e6ecf5;
+      --text-dim:  #9fabbd;
+      --text-faint:#6c7a90;
+      --accent:    #f0b354;
+      --accent-ink:#1b1204;
+      --accent-soft:#2e2513;
+      --good:      #5fd39a;
+      --warn:      #e9c26a;
+      --crit:      #ff8a7a;
+      --crit-soft: #331f1c;
+      --shadow:    0 1px 2px rgba(0, 0, 0, .3), 0 6px 24px rgba(0, 0, 0, .35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    .app {
+      max-width: 1180px;
+      min-height: 100%;
+      margin: 0 auto;
+      padding: 18px 20px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ─── Header ─────────────────────────────────────────────────────────── */
+    header.masthead {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+    }
+    .wordmark {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      display: inline-flex;
+      align-items: baseline;
+      gap: 1px;
+    }
+    .wordmark .spark { color: var(--accent); }
+    .thesis {
+      color: var(--text-dim);
+      font-size: 13.5px;
+      flex: 1 1 260px;
+    }
+    .chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .badge {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+    .badge.status { display: inline-flex; align-items: center; gap: 6px; }
+    .badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--good); flex: none;
+    }
+    .badge.mem .dot { background: var(--warn); }
+    /* Branch chip: accent-highlighted because being on a branch is a notable,
+       easy-to-forget session state (writes go to a fork, not main). A read-only
+       status indicator, not a control — you leave a branch with `RESET
+       zeta_branch` (see the Branching example), so a click here would be an
+       ambiguous, easy-to-mis-trigger way to discard your branch context. */
+    .badge.branchchip {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .badge.branchchip::before { content: "⑂ "; }
+    /* Database chip: a switcher. Current db is bold; the others are clickable
+       links that switch to them on click. */
+    .badge.dbchip b { color: var(--text); font-weight: 600; }
+    .badge.dbchip a.db-switch {
+      color: var(--text-dim);
+      text-decoration: none;
+      cursor: pointer;
+      border-bottom: 1px dotted var(--border-strong);
+    }
+    .badge.dbchip a.db-switch:hover { color: var(--accent); border-bottom-color: var(--accent); }
+    button.ghost {
+      font: inherit;
+      color: var(--text-dim);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 11px;
+      cursor: pointer;
+    }
+    button.ghost:hover { border-color: var(--border-strong); color: var(--text); }
+
+    /* ─── Toolbar ────────────────────────────────────────────────────────── */
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .toolbar .grow { flex: 1; }
+    /* Bar above the editor: a label on the left, "Load example" on the right. */
+    .editor-bar { display: flex; align-items: center; gap: 8px; }
+    .editor-bar .grow { flex: 1; }
+    .editor-label {
+      font-size: 11px; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--text-faint);
+    }
+    button.btn {
+      font: inherit;
+      font-weight: 600;
+      border-radius: var(--radius);
+      padding: 7px 14px;
+      cursor: pointer;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+    }
+    button.btn.small { padding: 4px 10px; font-size: 12.5px; font-weight: 500; }
+    button.btn:hover { border-color: var(--text-faint); }
+    button.btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-ink);
+    }
+    button.btn.primary:hover { filter: brightness(1.05); }
+    button.btn:disabled { opacity: .5; cursor: default; }
+    .kbd {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-faint);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      padding: 0 4px;
+      margin-left: 6px;
+    }
+
+    /* ─── "Load example" dropdown ────────────────────────────────────────── */
+    .dropdown { position: relative; display: inline-block; }
+    .dropdown-menu {
+      position: absolute;
+      /* Sits above the editor now, so open downward. */
+      top: calc(100% + 4px);
+      right: 0;
+      z-index: 20;
+      min-width: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    /* The `hidden` attribute must win over `display:flex` above (bare [hidden] is
+       only `display:none` at low specificity and would otherwise be overridden). */
+    .dropdown-menu[hidden] { display: none; }
+    button.example {
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      background: none;
+      color: var(--text);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.example:hover { background: var(--surface-2); }
+
+    /* ─── Two-pane body ──────────────────────────────────────────────────── */
+    .body-grid {
+      display: grid;
+      grid-template-columns: 232px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 780px) {
+      .body-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .panel > .panel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .panel-head button.mini {
+      font: inherit; font-size: 12px;
+      background: none; border: none; color: var(--text-faint);
+      cursor: pointer; padding: 0 2px;
+    }
+    .panel-head button.mini:hover { color: var(--text); }
+
+    /* Schema sidebar */
+    .schema-body { padding: 6px 4px 10px; max-height: 460px; overflow: auto; }
+    .schema-empty { color: var(--text-faint); font-size: 12.5px; padding: 8px 10px; }
+    details.table-node { margin: 1px 4px; }
+    details.table-node > summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--text);
+      display: flex; align-items: center; gap: 6px;
+    }
+    details.table-node > summary::-webkit-details-marker { display: none; }
+    details.table-node > summary:hover { background: var(--surface-2); }
+    details.table-node > summary .tw {
+      color: var(--text-faint); font-size: 10px; width: 8px;
+    }
+    details.table-node[open] > summary .tw { transform: rotate(90deg); }
+    .col-list { margin: 0 0 4px 22px; padding: 0; list-style: none; }
+    .col-list li {
+      font-family: var(--mono); font-size: 12px;
+      color: var(--text-dim);
+      padding: 2px 6px;
+      display: flex; justify-content: space-between; gap: 10px;
+    }
+    .col-list li .ctype { color: var(--text-faint); font-size: 11px; }
+
+    /* Editor + results (right pane) */
+    .work { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .editor-wrap { position: relative; }
+    /* The CodeMirror editor mounts into #editor. Its border/background/focus-ring
+       come from the adapter's theme (console/editor.mjs); here we size the frame,
+       make it resizable, and add the page's drop shadow. */
+    #editor {
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
+    #editor .cm-editor {
+      height: 100%;
+    }
+    #editor .cm-scroller {
+      /* Resizable, bounded scroll region (replaces the textarea's resize handle). */
+      min-height: 150px;
+      max-height: 45vh;
+      overflow: auto;
+      resize: vertical;
+    }
+    #editor .cm-content { padding-left: 14px; padding-right: 14px; }
+
+    /* Results live in a bounded, resizable, internally-scrolling pane so the
+       page doesn't grow with each run — you drag the bottom edge to resize and
+       the newest result auto-scrolls into view inside it. */
+    .results-pane {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .results-pane .pane-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px; font-weight: 600; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--text-dim);
+      flex: none;
+    }
+    .results {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px;
+      /* The scroll region. Resizable by the user; height persists per drag. */
+      height: 340px;
+      min-height: 120px;
+      max-height: 80vh;
+      overflow-y: auto;
+      resize: vertical;
+    }
+    .result-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      flex: none;
+    }
+    .result-block .rb-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 12px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--text-dim);
+    }
+    .result-block .rb-sql { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .result-block .rb-status { flex: none; color: var(--text-faint); }
+    .result-block .rb-status.ok { color: var(--good); }
+    .result-block .rb-status.err { color: var(--crit); }
+    .result-block .rb-csv {
+      flex: none;
+      font: inherit;
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 1px 7px;
+      cursor: pointer;
+    }
+    .result-block .rb-csv:hover { color: var(--text); border-color: var(--border-strong); }
+
+    .grid-scroll { overflow-x: auto; max-height: 300px; overflow-y: auto; }
+    table.grid { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px; }
+    table.grid thead th {
+      position: sticky; top: 0;
+      background: var(--surface-2);
+      color: var(--text-dim);
+      text-align: center;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-strong);
+      white-space: nowrap;
+    }
+    table.grid tbody td {
+      padding: 5px 12px;
+      border-bottom: 1px solid var(--border);
+      max-width: 340px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      vertical-align: top;
+    }
+    table.grid tbody tr:last-child td { border-bottom: none; }
+    table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    table.grid td.null { color: var(--text-faint); font-style: italic; }
+    .rb-error {
+      padding: 10px 12px;
+      font-family: var(--mono); font-size: 12.5px;
+      color: var(--crit);
+      background: var(--crit-soft);
+      white-space: pre-wrap;
+    }
+    .rb-note { padding: 10px 12px; color: var(--text-dim); font-size: 12.5px; }
+
+    /* ─── Persistence bar ────────────────────────────────────────────────── */
+    .persist-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 10px 12px;
+    }
+    .persist-bar .note { color: var(--text-faint); font-size: 12px; flex: 1 1 200px; }
+
+    /* ─── Concurrency demo (collapsible panel) ───────────────────────────── */
+    .demo-panel > summary.demo-summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .demo-panel > summary.demo-summary::-webkit-details-marker { display: none; }
+    .demo-summary .demo-hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-faint); }
+    .demo-panel[open] > summary .demo-hint::after { content: ""; }
+    .demo-panel[open] > summary .demo-hint { visibility: hidden; }
+    .demo-intro { padding: 10px 12px 0; color: var(--text-dim); font-size: 13px; }
+    .demo-intro b { color: var(--text); }
+    .demo-controls { padding: 10px 12px; display: flex; gap: 8px; align-items: center; }
+    .timeline {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 12px;
+      padding: 4px 12px 14px;
+    }
+    @media (max-width: 620px) { .timeline { grid-template-columns: 1fr; } }
+    .lane-head {
+      font-family: var(--mono); font-weight: 700; font-size: 12px;
+      padding: 6px 0; color: var(--text-dim);
+      border-bottom: 2px solid var(--border-strong);
+      position: sticky; top: 0;
+    }
+    .lane-head.a { color: var(--accent); }
+    .lane-head.b { color: var(--good); }
+    .step {
+      margin: 8px 0;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border-strong);
+      border-radius: 6px;
+      background: var(--surface-2);
+      font-size: 12.5px;
+      opacity: 0;
+      transform: translateY(4px);
+      animation: rise .3s ease forwards;
+    }
+    .step.a { border-left-color: var(--accent); }
+    .step.b { border-left-color: var(--good); }
+    .step.spanning { grid-column: 1 / -1; }
+    .step .step-sql { font-family: var(--mono); font-size: 12px; color: var(--text); }
+    .step .step-out { color: var(--text-dim); margin-top: 4px; }
+    .step.proof { border-color: var(--accent); background: var(--accent-soft); }
+    .step.proof .step-out { color: var(--text); font-weight: 600; }
+    @keyframes rise { to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .step { animation: none; opacity: 1; transform: none; }
+    }
+
+    footer.foot {
+      color: var(--text-faint); font-size: 12px; text-align: center;
+      padding-top: 8px;
+    }
+    footer.foot a { color: var(--text-dim); }
+    .boot-error {
+      margin: 40px auto; max-width: 640px;
+      padding: 16px 18px;
+      border: 1px solid var(--crit); background: var(--crit-soft);
+      border-radius: var(--radius);
+      font-family: var(--mono); font-size: 13px; color: var(--crit);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app" hidden>
+    <header class="masthead">
+      <span class="wordmark">zengram<span class="spark">-</span>lite</span>
+      <span class="thesis">An in-browser SQL database with <b>real concurrent, snapshot-isolated transactions</b> — the same engine as Zeta, compiled to WebAssembly. This is the full engine that also backs <b>zengram-lite</b>'s agentic memory.</span>
+      <span class="chips">
+        <span class="badge" title="Gzipped transfer size of the wasm module">~2.8&nbsp;MB&nbsp;gz</span>
+        <span class="badge status mem" id="statusChip" title="Storage backend and last durable checkpoint"><span class="dot"></span>in-memory</span>
+        <span class="badge dbchip" id="dbChip" title="Databases in this catalog (current database in bold)" hidden></span>
+        <span class="badge branchchip" id="branchChip" title="Active session branch — a copy-on-write timeline fork" hidden></span>
+        <button class="ghost" id="themeBtn" title="Toggle light / dark / system">theme: system</button>
+      </span>
+    </header>
+
+    <div class="editor-bar">
+      <span class="editor-label">SQL</span>
+      <span class="grow"></span>
+      <div class="dropdown" id="exampleDrop">
+        <button class="btn small" id="exampleBtn" aria-haspopup="true" aria-expanded="false">Load example ▾</button>
+        <div class="dropdown-menu" id="exampleMenu" role="menu" hidden>
+          <button class="example" role="menuitem" data-ex="tour">Guided tour</button>
+          <button class="example" role="menuitem" data-ex="joins">Joins &amp; CTEs</button>
+          <button class="example" role="menuitem" data-ex="window">Window functions</button>
+          <button class="example" role="menuitem" data-ex="vector">Vector search</button>
+          <button class="example" role="menuitem" data-ex="embed">Semantic search (embed)</button>
+          <button class="example" role="menuitem" data-ex="fts">Full-text</button>
+          <button class="example" role="menuitem" data-ex="jsonb">JSONB</button>
+          <button class="example" role="menuitem" data-ex="branching">Branching</button>
+          <button class="example" role="menuitem" data-ex="multidb">Multi-database</button>
+          <button class="example" role="menuitem" data-ex="pgq">Graph (SQL/PGQ)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="editor-wrap">
+      <div id="editor" aria-label="SQL editor"></div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn primary" id="runBtn">Run<span class="kbd">⌘/Ctrl ⏎</span></button>
+      <button class="btn" id="runAllBtn">Run all<span class="kbd">⇧⌘/Ctrl ⏎</span></button>
+      <button class="btn" id="shareBtn" title="Copy a link that pre-fills this SQL (shares the query text, not your data)">Share</button>
+      <span class="grow"></span>
+      <button class="btn" id="clearBtn">Clear results</button>
+    </div>
+
+    <div class="body-grid">
+      <aside class="panel schema" aria-label="Schema">
+        <div class="panel-head">
+          <span>Schema</span>
+          <button class="mini" id="refreshSchema" title="Refresh schema">⟳</button>
+        </div>
+        <div class="schema-body" id="schemaBody">
+          <div class="schema-empty">No tables yet. Run some DDL.</div>
+        </div>
+      </aside>
+
+      <section class="work">
+        <div class="results-pane">
+          <div class="pane-head">
+            <span>Results</span>
+            <span id="resultCount" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-faint);"></span>
+          </div>
+          <div class="results" id="results" aria-live="polite">
+            <div class="rb-note" style="border:1px dashed var(--border);border-radius:var(--radius);">
+              Results appear here. Press <span class="kbd">⌘/Ctrl ⏎</span> to run the statement your cursor is in, or <b>Run all</b> for the whole editor. Drag the bottom edge of this pane to resize it.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span>Persistence — OPFS snapshot</span></div>
+      <div class="persist-bar">
+        <button class="btn" id="saveBtn">Save to OPFS</button>
+        <button class="btn" id="clearSessionBtn" title="Empty the in-memory database. Your saved OPFS snapshot is kept — reload restores it.">Clear session</button>
+        <button class="btn" id="deleteSnapBtn" title="Delete the durable OPFS snapshot. After this, a reload starts empty.">Delete snapshot</button>
+        <span class="note" id="persistNote">In-memory. Durable only as of your last <b>Save</b> — anything after it is lost on reload. (No worker / COOP-COEP headers needed.)</span>
+      </div>
+    </div>
+
+    <details class="panel demo-panel">
+      <summary class="panel-head demo-summary">
+        <span>Concurrent transactions — the differentiator</span>
+        <span class="demo-hint">show ▾</span>
+      </summary>
+      <p class="demo-intro">
+        Two transactions open at once, each on its own snapshot. Txn&nbsp;B commits a
+        row while Txn&nbsp;A is mid-flight — and <b>A keeps seeing its original
+        snapshot</b>. PGlite's single-connection backend structurally can't do this.
+        The counts below are live engine output, not a script.
+      </p>
+      <div class="demo-controls">
+        <button class="btn primary" id="demoBtn">Run demo ▶</button>
+        <span class="note" style="color:var(--text-faint);font-size:12px;">Runs on a throwaway table (<code>iso_demo</code>).</span>
+      </div>
+      <div class="timeline" id="timeline" hidden>
+        <div class="lane-head a">Txn A (reader)</div>
+        <div class="lane-head b">Txn B (writer)</div>
+      </div>
+    </details>
+
+    <footer class="foot">
+      zengram-lite · in-browser build of <a href="https://github.com/genezhang/zeta" target="_blank" rel="noopener">Zeta</a> ·
+      the engine runs entirely client-side, no server, no network. · <a href="../index.html" style="color:inherit;">← agentic-memory demo</a>
+    </footer>
+  </div>
+
+  <div class="boot-error" id="bootError" hidden></div>
+
+  <script type="module">
+    import init, { ZetaDb } from "../pkg-web/zengram_wasm.js";
+    import { runAll, statementAtCursor } from "./console/router.mjs";
+    import { resultToGrid, statusLine, resultToCsv } from "./console/format.mjs";
+    import { loadFromOpfs, saveToOpfs, deleteFromOpfs } from "./opfs.mjs";
+    import { mountEditor } from "./console/editor.mjs";
+
+    const SNAPSHOT = "zengram-lite-playground.zeta";
+    const $ = (id) => document.getElementById(id);
+
+    // The engine handle. Assigned by boot() at the END of this module — boot must
+    // run after every const/function below is initialized, because `await init()`
+    // suspends module evaluation and any identifier declared later would still be
+    // in its temporal dead zone if we booted from here.
+    let db;
+
+    // ── Boot: instantiate wasm, restore an OPFS snapshot if present ──────────
+    async function boot() {
+      try {
+        await init();
+        let restored = false;
+        try {
+          const bytes = await loadFromOpfs(SNAPSHOT);
+          if (bytes) { db = ZetaDb.openFromSnapshot(bytes); restored = true; }
+        } catch { /* OPFS unavailable (e.g. file://) — fall through to fresh */ }
+        if (!db) { db = ZetaDb.open(); }
+        $("app").hidden = false;
+        if (restored) setStatus("restored from OPFS", true);
+        // A shared link (#sql=…) pre-fills the editor — but never auto-runs.
+        const shared = readSharedSql();
+        if (shared !== null) {
+          editor.value = shared;
+          $("persistNote").textContent = "Loaded SQL from a shared link. Press Run to execute it.";
+        }
+        // Console-first: start with an empty editor. Examples are available from
+        // the "Load example" menu; the guided tour is one of them.
+        editor.focus();
+        refreshSchema();
+        refreshMeta();
+      } catch (e) {
+        const el = $("bootError");
+        el.hidden = false;
+        el.textContent =
+          "Failed to load the zengram-lite wasm module.\n\n" +
+          (e && e.message ? e.message : String(e)) +
+          "\n\nFetch or build the web target and serve over http:\n" +
+          "  ./scripts/fetch-artifact.sh            # published artifact, OR\n" +
+          "  ./scripts/build-from-source.sh         # build from the monorepo\n" +
+          "  python3 -m http.server   # then open /demo/playground/";
+        throw e;
+      }
+    }
+
+    // ── Theme toggle: system → light → dark → system ────────────────────────
+    const THEMES = ["system", "light", "dark"];
+    let themeIx = 0;
+    // Whether the OS prefers dark (for the "system" setting).
+    function prefersDark() {
+      return matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    // The *effective* dark state given the current theme choice.
+    function effectiveDark() {
+      const t = THEMES[themeIx];
+      return t === "dark" || (t === "system" && prefersDark());
+    }
+    $("themeBtn").onclick = () => {
+      themeIx = (themeIx + 1) % THEMES.length;
+      const t = THEMES[themeIx];
+      if (t === "system") document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", t);
+      $("themeBtn").textContent = "theme: " + t;
+      editor.setDark(effectiveDark()); // recolor the CodeMirror editor to match
+    };
+    // Keep the editor in sync if the OS theme flips while on "system".
+    matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+      if (THEMES[themeIx] === "system") editor.setDark(prefersDark());
+    });
+
+    // ── Status chip ─────────────────────────────────────────────────────────
+    function setStatus(text, durable) {
+      const chip = $("statusChip");
+      chip.classList.toggle("mem", !durable);
+      // Build with DOM nodes, not innerHTML: `text` can carry an engine error
+      // string (e.g. "switch failed: …" below), and an error may echo a
+      // catalog identifier that contains markup. A text node renders it inert
+      // regardless of the caller, so this sink can't become an XSS vector.
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      chip.replaceChildren(dot, document.createTextNode(text));
+    }
+
+    // ── Database + branch chips ─────────────────────────────────────────────
+    // Multi-database is a logical namespace over the one shared catalog; a
+    // branch is a copy-on-write timeline fork, orthogonal to the database.
+    // Both read the catalog directly (db.databases() / db.branch()) — the wasm
+    // build has no pg_catalog SQL shim — and are refreshed on boot and after
+    // any run. `CREATE DATABASE` changes the database list; `SET zeta_branch`
+    // (intercepted by the router → db.setBranch) changes the active branch.
+    // The database chip appears only when more than one database exists (the
+    // common single-database case stays uncluttered); the branch chip appears
+    // only while on a branch.
+    function refreshMeta() {
+      // Database chip — a switcher: lists all databases, the current one bold,
+      // each clickable to switch to it. The current db comes from db.database()
+      // (the selected connection state), NOT a SQL query — `null` = the
+      // system-default "zeta".
+      const dbEl = $("dbChip");
+      try {
+        const dbs = db.databases() || [];
+        const current = db.database() ?? "zeta";
+        if (dbs.length > 1) {
+          dbEl.innerHTML = dbs
+            .map((d) => {
+              const label = escapeHtml(d);
+              return d === current
+                ? `<b data-db="${label}">${label}</b>`
+                : `<a href="#" class="db-switch" data-db="${label}">${label}</a>`;
+            })
+            .join(" · ");
+          dbEl.hidden = false;
+        } else {
+          dbEl.hidden = true;
+        }
+      } catch {
+        dbEl.hidden = true;
+      }
+
+      // Branch chip — a read-only indicator, shown only when the session is on
+      // a branch. Leaving a branch is done with `RESET zeta_branch` (or `SET
+      // zeta_branch = '…'` to switch), typed into the editor; the chip is not a
+      // control, so a stray click can't silently discard your branch context.
+      const brEl = $("branchChip");
+      try {
+        const b = db.branch();
+        if (b) {
+          brEl.textContent = b;
+          brEl.title = `On branch "${b}" — writes go to this fork, isolated from main. Use RESET zeta_branch to return to main.`;
+          brEl.hidden = false;
+        } else {
+          brEl.hidden = true;
+        }
+      } catch {
+        brEl.hidden = true;
+      }
+    }
+    // Clicking a database name in the db chip switches to it. Delegated so it
+    // survives refreshMeta() rebuilding the chip's innerHTML. Switching also
+    // refreshes the schema sidebar (its tables are per-database, though today
+    // it still lists all — see refreshSchema note).
+    $("dbChip").addEventListener("click", (e) => {
+      const a = e.target.closest(".db-switch");
+      if (!a) return;
+      e.preventDefault();
+      try { db.setDatabase(a.dataset.db); }
+      catch (err) { setStatus(`switch failed: ${err.message || err}`, false); }
+      refreshMeta();
+      refreshSchema();
+    });
+
+    // ── Editor helpers ──────────────────────────────────────────────────────
+    // A CodeMirror editor behind a textarea-like adapter (console/editor.mjs), so
+    // the rest of the page keeps using .value / .selectionStart / .focus().
+    const editor = mountEditor({
+      parent: $("editor"),
+      dark: prefersDark(),
+      placeholder: "Type SQL and press ⌘/Ctrl+Enter to run. ↑/↓ recall previous statements.",
+      onRun: () => runBuffer(currentStatement()),
+      onRunAll: () => runBuffer(editor.value),
+      onHistory: (dir) => navigateHistory(dir),
+    });
+
+    // The statement the cursor sits in (for single-Run). Delegates to the
+    // router's `statementAtCursor`, which attributes a trailing comment to the
+    // statement it follows (so Run on `SET x=1; -- note` runs the SET, not the
+    // statement below the comment). Falls back to the whole buffer.
+    function currentStatement() {
+      const full = editor.value;
+      const pos = editor.selectionStart ?? full.length;
+      return statementAtCursor(full, pos) || full.trim();
+    }
+
+    // ── Command history (↑/↓, in-memory for the session) ────────────────────
+    // Successfully-run inputs are pushed here. The adapter calls navigateHistory
+    // only when the cursor is on the first/last line (dir -1 = ↑, +1 = ↓); it
+    // returns true if it consumed the key, false to let the arrow move the cursor.
+    const history = [];
+    let histIx = -1;      // -1 = not navigating; else index into `history`
+    let histDraft = "";   // what the user was typing before they pressed ↑
+
+    function pushHistory(text) {
+      const t = text.trim();
+      if (!t) return;
+      // De-dup consecutive identical entries.
+      if (history[history.length - 1] !== t) history.push(t);
+      histIx = -1;
+      histDraft = "";
+    }
+    function navigateHistory(dir) {
+      if (dir === -1) {
+        if (!history.length) return false;
+        if (histIx === -1) { histDraft = editor.value; histIx = history.length - 1; }
+        else if (histIx > 0) { histIx -= 1; }
+        // else already at oldest — stay, but consume the key.
+      } else {
+        if (histIx === -1) return false; // not navigating → let ↓ move the cursor
+        histIx = histIx < history.length - 1 ? histIx + 1 : -1; // past newest → draft
+      }
+      editor.value = histIx === -1 ? histDraft : history[histIx];
+      const end = editor.value.length;
+      editor.selectionStart = editor.selectionEnd = end;
+      return true;
+    }
+
+    // ── Running SQL ─────────────────────────────────────────────────────────
+    const resultsEl = $("results");
+
+    // Keep the pane's header count in sync with how many result blocks are shown.
+    function updateResultCount() {
+      const n = resultsEl.querySelectorAll(".result-block").length;
+      $("resultCount").textContent = n ? `${n} shown` : "";
+    }
+
+    function clearResults() {
+      resultsEl.innerHTML = "";
+      resultsEl.dataset.fresh = "1";
+      updateResultCount();
+    }
+
+    function runBuffer(text) {
+      if (!text || !text.trim()) return;
+      pushHistory(text);
+      const results = runAll(db, text);
+      // Clear the placeholder note on first real run.
+      if (resultsEl.dataset.fresh !== "1") { resultsEl.innerHTML = ""; resultsEl.dataset.fresh = "1"; }
+      let mutated = false;
+      for (const r of results) {
+        renderResult(r);
+        if (r.kind === "ddl" || (r.kind === "mut" && !r.error)) mutated = true;
+      }
+      if (mutated) refreshSchema();
+      // Always refresh the db/branch chips: `SET zeta_branch`, `CREATE DATABASE`,
+      // and `CREATE`/`MERGE BRANCH` can change them without touching the table
+      // schema, and the classification above doesn't flag all of those.
+      refreshMeta();
+      updateResultCount();
+      // Scroll the newest result into view WITHIN the pane (not the page): pin the
+      // pane's own scroll to the bottom.
+      resultsEl.scrollTop = resultsEl.scrollHeight;
+    }
+
+    function renderResult(r) {
+      const block = document.createElement("div");
+      block.className = "result-block";
+
+      const head = document.createElement("div");
+      head.className = "rb-head";
+      const sql = document.createElement("span");
+      sql.className = "rb-sql";
+      sql.textContent = r.sql;
+      sql.title = r.sql;
+      const status = document.createElement("span");
+      status.className = "rb-status " + (r.error ? "err" : "ok");
+      status.textContent = statusLine(r);
+      head.append(sql, status);
+      // Download-CSV affordance for non-empty query results.
+      if (!r.error && r.kind === "query" && (r.rows?.length ?? 0) > 0) {
+        const csvBtn = document.createElement("button");
+        csvBtn.className = "rb-csv";
+        csvBtn.textContent = "CSV";
+        csvBtn.title = "Download this result as CSV";
+        csvBtn.onclick = () => downloadCsv(resultToCsv(r));
+        head.append(csvBtn);
+      }
+      block.append(head);
+
+      if (r.error) {
+        const err = document.createElement("div");
+        err.className = r.kind === "txn" ? "rb-note" : "rb-error";
+        err.textContent = r.error;
+        block.append(err);
+      } else if (r.kind === "query") {
+        block.append(gridEl(r));
+      } else {
+        const note = document.createElement("div");
+        note.className = "rb-note";
+        note.textContent = "OK";
+        block.append(note);
+      }
+      resultsEl.append(block);
+    }
+
+    function gridEl(r) {
+      const grid = resultToGrid(r);
+      const scroll = document.createElement("div");
+      scroll.className = "grid-scroll";
+      if (grid.columns.length === 0) {
+        const n = document.createElement("div");
+        n.className = "rb-note";
+        n.textContent = "(no columns)";
+        return n;
+      }
+      const table = document.createElement("table");
+      table.className = "grid";
+      const thead = document.createElement("thead");
+      const htr = document.createElement("tr");
+      for (const c of grid.columns) {
+        const th = document.createElement("th");
+        th.textContent = c;
+        htr.append(th);
+      }
+      thead.append(htr);
+      table.append(thead);
+      const tbody = document.createElement("tbody");
+      if (grid.rows.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = grid.columns.length;
+        td.className = "null";
+        td.textContent = "(0 rows)";
+        tr.append(td);
+        tbody.append(tr);
+      }
+      for (const row of grid.rows) {
+        const tr = document.createElement("tr");
+        for (const cell of row) {
+          const td = document.createElement("td");
+          if (cell.isNumber) td.classList.add("num");
+          if (cell.isNull) td.classList.add("null");
+          td.textContent = cell.text;
+          td.title = cell.title;
+          tr.append(td);
+        }
+        tr.append();
+        tbody.append(tr);
+      }
+      table.append(tbody);
+      scroll.append(table);
+      return scroll;
+    }
+
+    $("runBtn").onclick = () => runBuffer(currentStatement());
+    $("runAllBtn").onclick = () => runBuffer(editor.value);
+    $("clearBtn").onclick = () => clearResults();
+
+    // ── Share: encode the editor's SQL into the URL (text only, not data) ─────
+    // The link carries the *query*, not the database — opening it pre-fills the
+    // editor (it does not auto-run). Encoding: base64 of the UTF-8 URI-encoded
+    // text, so any SQL (quotes, newlines, unicode) round-trips through the hash.
+    function encodeSql(text) {
+      return btoa(unescape(encodeURIComponent(text)));
+    }
+    function decodeSql(b64) {
+      try { return decodeURIComponent(escape(atob(b64))); } catch { return null; }
+    }
+    // Read a shared SQL payload from the URL hash (#sql=…), or null if none/invalid.
+    function readSharedSql() {
+      const m = /[#&]sql=([^&]+)/.exec(location.hash);
+      return m ? decodeSql(m[1]) : null;
+    }
+    $("shareBtn").onclick = async () => {
+      const sql = editor.value;
+      if (!sql.trim()) { flashShare("Nothing to share — the editor is empty."); return; }
+      const url = `${location.origin}${location.pathname}#sql=${encodeSql(sql)}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        flashShare("Link copied to clipboard — it pre-fills this SQL (not your data).");
+      } catch {
+        // Clipboard blocked (e.g. insecure context) — put the link in the address
+        // bar so the user can copy it manually.
+        location.hash = `sql=${encodeSql(sql)}`;
+        flashShare("Copy the link from your address bar — it pre-fills this SQL.");
+      }
+    };
+    function flashShare(msg) {
+      const note = $("persistNote");
+      const prev = note.innerHTML;
+      note.textContent = msg;
+      setTimeout(() => { note.innerHTML = prev; }, 4000);
+    }
+
+    // ── Schema sidebar (catalog introspection) ──────────────────────────────
+    // The wasm build has no information_schema SQL shim; db.schema() reads the
+    // catalog directly and returns { tables: [ { name, columns: [...] } ] }.
+    // NOTE: db.schema() lists ALL databases' tables (it does not yet filter by
+    // the selected database) — per-database sidebar filtering is a documented
+    // follow-up. Switching the database still re-scopes query execution.
+    function refreshSchema() {
+      const body = $("schemaBody");
+      let tables;
+      try {
+        tables = (db.schema().tables || []);
+      } catch (e) {
+        body.innerHTML = `<div class="schema-empty">schema unavailable: ${escapeHtml(e.message || String(e))}</div>`;
+        return;
+      }
+      if (tables.length === 0) {
+        body.innerHTML = `<div class="schema-empty">No tables yet. Run some DDL, or load an example above.</div>`;
+        return;
+      }
+      body.innerHTML = "";
+      for (const tbl of tables) {
+        const t = tbl.name;
+        const node = document.createElement("details");
+        node.className = "table-node";
+        const summary = document.createElement("summary");
+        summary.innerHTML = `<span class="tw">▶</span>`;
+        const name = document.createElement("span");
+        name.textContent = t;
+        summary.append(name);
+        // Click the name (not the twisty) → insert a SELECT.
+        name.addEventListener("click", (e) => {
+          e.preventDefault();
+          insertSelect(t);
+        });
+        node.append(summary);
+
+        const ul = document.createElement("ul");
+        ul.className = "col-list";
+        for (const c of tbl.columns || []) {
+          const li = document.createElement("li");
+          const nm = document.createElement("span");
+          nm.textContent = c.name + (c.pk ? " 🔑" : "");
+          const ty = document.createElement("span");
+          ty.className = "ctype";
+          ty.textContent = (c.type || "").toLowerCase() + (c.nullable ? "" : " ·nn");
+          li.append(nm, ty);
+          li.title = `${c.name} ${c.type}${c.nullable ? "" : " NOT NULL"}${c.pk ? " PRIMARY KEY" : ""}`;
+          ul.append(li);
+        }
+        node.append(ul);
+        body.append(node);
+      }
+    }
+    $("refreshSchema").onclick = refreshSchema;
+
+    function insertSelect(t) {
+      // Double-quote the identifier (and escape embedded quotes) so a table named
+      // e.g. `my table` or `select` produces valid SQL.
+      const ident = `"${String(t).replace(/"/g, '""')}"`;
+      const stmt = `SELECT * FROM ${ident} LIMIT 50;`;
+      editor.value = editor.value.trim()
+        ? editor.value.replace(/\s*$/, "\n\n") + stmt
+        : stmt;
+      editor.focus();
+      editor.selectionStart = editor.selectionEnd = editor.value.length;
+    }
+
+    // ── Persistence ─────────────────────────────────────────────────────────
+    $("saveBtn").onclick = async () => {
+      try {
+        const bytes = db.exportSnapshot();
+        await saveToOpfs(SNAPSHOT, bytes);
+        const kb = (bytes.length / 1024).toFixed(0);
+        setStatus(`saved · ${kb} KB`, true);
+        $("persistNote").innerHTML = `Snapshot saved to OPFS (${kb} KB). Reload the page — the rows come back.`;
+      } catch (e) {
+        const msg = e && e.message ? e.message : String(e);
+        // The snapshot codec can't yet encode a few remaining column types
+        // (ARRAY, ENUM, RANGE — VECTOR is now supported); it throws rather than
+        // silently dropping data. Read the type name out of the error and explain
+        // it instead of surfacing the raw internal message.
+        const m = /DataType::(\w+)/.exec(msg);
+        const note = m
+          ? `Can't snapshot yet: this database has a <b>${escapeHtml(m[1].toUpperCase())}</b> column, ` +
+            `which the OPFS snapshot codec doesn't encode yet. Everything runs in memory fine — ` +
+            `snapshot persistence just doesn't cover ${escapeHtml(m[1].toUpperCase())} columns in v0.1. ` +
+            `Drop that table (or use a database without one) to save.`
+          : `Save failed: ${escapeHtml(msg)}`;
+        $("persistNote").innerHTML = `<span style="color:var(--crit)">${note}</span>`;
+      }
+    };
+    // Clear session: empty the in-memory database but KEEP the OPFS snapshot, so a
+    // reload restores your last Save.
+    $("clearSessionBtn").onclick = () => {
+      db = ZetaDb.open();
+      clearResults();
+      setStatus("in-memory", false);
+      $("persistNote").innerHTML =
+        "Session cleared (in-memory). Your saved OPFS snapshot is untouched — reload restores it, or Save again to overwrite it.";
+      editor.value = "";
+      editor.focus();
+      refreshSchema();
+      refreshMeta();
+    };
+    // Delete snapshot: remove the durable OPFS copy. Does not touch the current
+    // in-memory database — but a reload from here starts empty.
+    $("deleteSnapBtn").onclick = async () => {
+      try { await deleteFromOpfs(SNAPSHOT); } catch { /* ignore */ }
+      $("persistNote").innerHTML =
+        "OPFS snapshot deleted. Your current in-memory data is still here, but a <b>reload</b> now starts empty.";
+    };
+
+    // ── Concurrent-transaction demo ──────────────────────────────────────────
+    $("demoBtn").onclick = () => runConcurrencyDemo();
+
+    async function runConcurrencyDemo() {
+      // Re-entrancy guard: the demo has ~2.5s of awaits and opens live txn
+      // handles; a second concurrent run would wipe the timeline mid-flight and
+      // race the throwaway-table DDL. Disable the button until this run finishes.
+      const btn = $("demoBtn");
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const tl = $("timeline");
+      tl.hidden = false;
+      // Reset the timeline to just the two lane heads.
+      tl.querySelectorAll(".step").forEach((s) => s.remove());
+      const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const pause = (ms) => new Promise((r) => setTimeout(r, reduce ? 0 : ms));
+
+      const spanStep = (html, extra = "") => {
+        const d = document.createElement("div");
+        d.className = `step spanning ${extra}`;
+        d.innerHTML = html;
+        tl.append(d);
+        return d;
+      };
+      const laneStep = (lane, sql, out, extra = "") => {
+        const d = document.createElement("div");
+        d.className = `step ${lane} ${extra}`;
+        d.innerHTML = `<div class="step-sql">${escapeHtml(sql)}</div><div class="step-out">${escapeHtml(out)}</div>`;
+        tl.append(d);
+        // The other lane's cell for this row stays empty — keep the grid aligned.
+        const spacer = document.createElement("div");
+        spacer.className = "step";
+        spacer.style.visibility = "hidden";
+        spacer.style.animation = "none";
+        if (lane === "a") tl.append(spacer); else tl.insertBefore(spacer, d);
+        return d;
+      };
+
+      try {
+        // Fresh throwaway table each run.
+        try { db.execDdl("DROP TABLE IF EXISTS iso_demo"); } catch { /* ignore */ }
+        db.execDdl("CREATE TABLE iso_demo (id INTEGER PRIMARY KEY)");
+        db.execMut("INSERT INTO iso_demo (id) VALUES (1)");
+        spanStep(`<div class="step-out">Seeded <code>iso_demo</code> with 1 row. Opening two overlapping transactions…</div>`);
+        await pause(500);
+
+        const a = db.begin();
+        const aBefore = a.query("SELECT COUNT(*) AS c FROM iso_demo").rows[0].c;
+        laneStep("a", "BEGIN;  SELECT count(*) FROM iso_demo;", `A opens a snapshot → sees ${aBefore} row.`);
+        await pause(650);
+
+        const b = db.begin();
+        b.execMut("INSERT INTO iso_demo (id) VALUES (2)");
+        b.commit();
+        laneStep("b", "BEGIN;  INSERT … (2);  COMMIT;", "B inserts a second row and commits.");
+        await pause(650);
+
+        const aAfter = a.query("SELECT COUNT(*) AS c FROM iso_demo").rows[0].c;
+        laneStep(
+          "a",
+          "SELECT count(*) FROM iso_demo;  -- same A",
+          `A still sees ${aAfter} row — B's commit is invisible to A's snapshot.`,
+          "proof",
+        );
+        await pause(650);
+
+        a.commit();
+        const fresh = db.query("SELECT COUNT(*) AS c FROM iso_demo").rows[0].c;
+        spanStep(
+          `<div class="step-sql">A COMMIT;  then a fresh read: SELECT count(*) FROM iso_demo;</div>` +
+          `<div class="step-out">A commits. A brand-new snapshot now sees <b>${escapeHtml(String(fresh))} rows</b> — both are there. ` +
+          `Snapshot isolation held throughout: <b>${escapeHtml(String(aBefore))} → ${escapeHtml(String(aAfter))}</b> for A while B advanced the table.</div>`,
+          "proof",
+        );
+      } catch (e) {
+        spanStep(`<div class="rb-error" style="margin:0">demo error: ${escapeHtml(e.message || String(e))}</div>`);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Example snippets ─────────────────────────────────────────────────────
+    // A toy, deterministic "embedder" for the semantic-search example: a
+    // bag-of-words over a tiny fixed vocabulary. It exists only so embed() has
+    // SOMETHING to call in the playground — there is deliberately no built-in
+    // model in the browser build. Real apps register their own model (e.g.
+    // Transformers.js, or an embedding API) via db.setEmbedFn(fn, dims). See
+    // docs/sql_reference.md → "Wiring embed() from JS".
+    const DEMO_VOCAB = ["apple", "red", "green", "ocean", "sky", "blue"];
+    const DEMO_DIMS = DEMO_VOCAB.length;
+    function demoEmbed(text) {
+      const t = String(text).toLowerCase();
+      return DEMO_VOCAB.map((w) => (t.includes(w) ? 1 : 0));
+    }
+
+    const EXAMPLES = {
+      tour: `-- Welcome to zengram-lite. Put your cursor in a statement and press
+-- Cmd/Ctrl+Enter to run it, or click "Run all".
+
+CREATE TABLE authors (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE books  (id INTEGER PRIMARY KEY, author_id INTEGER, title TEXT, year INTEGER);
+
+INSERT INTO authors VALUES (1,'Ursula K. Le Guin'), (2,'Toni Morrison'), (3,'Italo Calvino');
+INSERT INTO books VALUES
+  (1,1,'The Dispossessed',1974), (2,1,'A Wizard of Earthsea',1968),
+  (3,2,'Beloved',1987), (4,3,'Invisible Cities',1972), (5,3,'If on a winters night',1979);
+
+SELECT a.name, count(*) AS books, min(b.year) AS earliest
+FROM authors a JOIN books b ON b.author_id = a.id
+GROUP BY a.name
+ORDER BY books DESC, earliest;`,
+
+      joins: `-- A recursive CTE (numbers 1..5) with a windowed running sum.
+WITH RECURSIVE nums(n) AS (
+  SELECT 1 UNION ALL SELECT n + 1 FROM nums WHERE n < 5
+)
+SELECT n,
+       n * n                     AS square,
+       sum(n) OVER (ORDER BY n)  AS running_sum
+FROM nums
+ORDER BY n;`,
+
+      window: `-- Window functions: rank books by year within each author.
+CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY, author_id INTEGER, title TEXT, year INTEGER);
+SELECT author_id, title, year,
+       row_number() OVER w  AS seq,
+       rank()       OVER w  AS yr_rank,
+       lag(year)    OVER w  AS prev_year
+FROM books
+WINDOW w AS (PARTITION BY author_id ORDER BY year)
+ORDER BY author_id, year;`,
+
+      vector: `-- Vector similarity search (HNSW). Vectors are indexed and always
+-- compiled in — bring embeddings from your app, query with <-> (L2),
+-- <=> (cosine), or <#> (inner product).
+CREATE TABLE docs (id INTEGER PRIMARY KEY, body TEXT, embedding VECTOR(3));
+INSERT INTO docs VALUES
+  (1,'red apple',   '[0.9, 0.1, 0.0]'),
+  (2,'green apple', '[0.8, 0.2, 0.1]'),
+  (3,'blue sky',    '[0.0, 0.1, 0.9]');
+CREATE INDEX docs_vec ON docs USING HNSW (embedding vector_l2_ops);
+
+-- Nearest neighbours to a "reddish" query vector:
+SELECT id, body, embedding <-> '[0.85, 0.15, 0.0]' AS dist
+FROM docs
+ORDER BY dist
+LIMIT 3;`,
+
+      embed: `-- Semantic search with embed(). In this build embed() is compiled in
+-- but has NO built-in model — you register one from JS. Loading this
+-- example wired a tiny demo embedder via db.setEmbedFn(fn, ${DEMO_DIMS}); a real
+-- app plugs in Transformers.js or an embedding API the same way (see the
+-- SQL reference, "Wiring embed() from JS").
+CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT, v VECTOR(${DEMO_DIMS}));
+
+-- Ingest: embed() turns each row's text into a vector, right inside SQL.
+INSERT INTO notes (id, body, v) VALUES
+  (1, 'a red apple',      embed('a red apple')),
+  (2, 'the green apple',  embed('the green apple')),
+  (3, 'blue ocean sky',   embed('blue ocean sky'));
+
+-- Index the vectors for approximate nearest-neighbour search.
+CREATE INDEX notes_v ON notes USING HNSW (v vector_cosine_ops);
+
+-- Query by meaning: embed the search text, rank by cosine distance (<=>).
+-- (In this browser build the ranking is correct but scans; HNSW-accelerated
+--  ANN is on the roadmap.)
+SELECT id, body, v <=> embed('apple fruit') AS dist
+FROM notes
+ORDER BY dist
+LIMIT 3;`,
+
+      fts: `-- Full-text search with tsvector / tsquery and the @@ match operator.
+-- (In this browser build the match is correct but scans; indexed FTS is on
+--  the roadmap — see the project notes.)
+CREATE TABLE posts (id INTEGER PRIMARY KEY, body TEXT);
+INSERT INTO posts VALUES
+  (1,'the quick brown fox jumps'),
+  (2,'a lazy dog sleeps all day'),
+  (3,'quick foxes are clever');
+
+SELECT id, body,
+       ts_rank(to_tsvector('english', body), plainto_tsquery('english','quick fox')) AS rank
+FROM posts
+WHERE to_tsvector('english', body) @@ plainto_tsquery('english','quick fox')
+ORDER BY rank DESC;`,
+
+      branching: `-- Database branching: a copy-on-write fork of your data. A branch
+-- sees main's rows, but its own writes stay isolated until you MERGE.
+-- Run all, or step through with Cmd/Ctrl+Enter.
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);
+INSERT INTO t VALUES (1, 'on main');
+
+-- Fork a branch and switch onto it (the chip in the header follows along).
+CREATE BRANCH feat;
+SET zeta_branch = 'feat';
+
+-- On the branch: main's row is visible, and a new write is isolated.
+INSERT INTO t VALUES (2, 'only on feat');
+SELECT * FROM t ORDER BY id;          -- sees rows 1 and 2
+
+-- Back on main: the branch write is NOT visible.
+RESET zeta_branch;
+SELECT * FROM t ORDER BY id;          -- sees only row 1
+
+-- Publish the branch's writes into main, then confirm.
+MERGE BRANCH feat;
+SELECT * FROM t ORDER BY id;          -- now sees rows 1 and 2`,
+
+      jsonb: `-- JSONB: store schemaless documents, query them with path operators,
+-- containment (@>), key existence (?), and aggregate back into JSON.
+CREATE TABLE products (id INT PRIMARY KEY, name TEXT, attrs JSONB);
+INSERT INTO products VALUES
+  (1,'Laptop',  '{"brand":"Acme","specs":{"ram":16,"ssd":512},"tags":["work","portable"]}'),
+  (2,'Desk',    '{"brand":"Oak","specs":{"width":120},"tags":["home"]}'),
+  (3,'Monitor', '{"brand":"Acme","specs":{"size":27},"tags":["work"]}');
+
+-- Path extraction (-> keeps JSON, ->> returns text) + containment filter (@>):
+SELECT name,
+       attrs->'specs'->>'ram' AS ram,
+       attrs->>'brand'        AS brand
+FROM products
+WHERE attrs @> '{"brand":"Acme"}'
+ORDER BY id;
+
+-- Key/element existence (?) + aggregate names back into a JSON array:
+SELECT jsonb_agg(name ORDER BY id) AS work_products
+FROM products
+WHERE attrs->'tags' ? 'work';`,
+
+      multidb: `-- Multiple databases as logical namespaces over one engine. Switch
+-- with USE <db> (or SET database = '…' / RESET database); the header chip
+-- follows along and unqualified names resolve into the current database.
+CREATE DATABASE shop;
+CREATE DATABASE analytics;
+
+USE shop;                              -- now connected to shop
+CREATE TABLE orders (id INT PRIMARY KEY, total NUMERIC);
+INSERT INTO orders VALUES (1, 42.50), (2, 17.00);
+
+-- current_database() and the unqualified 'orders' both resolve into shop:
+SELECT current_database() AS db,
+       count(*)           AS orders,
+       sum(total)         AS revenue
+FROM orders;
+
+-- Reach another database by fully-qualifying the name:
+RESET database;                        -- back to the default (zeta)
+SELECT count(*) AS shop_orders FROM shop.public.orders;`,
+
+      pgq: `-- SQL/PGQ (ISO 9075-16): declare a property graph over existing tables,
+-- then pattern-match paths with GRAPH_TABLE ... MATCH.
+CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE knows  (id INTEGER PRIMARY KEY, person1_id INTEGER, person2_id INTEGER, since INTEGER);
+INSERT INTO person VALUES (1,'Alice'),(2,'Bob'),(3,'Carol'),(4,'Dave');
+INSERT INTO knows  VALUES (1,1,2,2020),(2,2,3,2021),(3,3,4,2022),(4,1,3,2019);
+
+CREATE PROPERTY GRAPH social
+  VERTEX TABLES (person KEY (id) LABEL Person PROPERTIES (name))
+  EDGE TABLES (
+    knows KEY (id)
+      SOURCE KEY (person1_id) REFERENCES person (id)
+      DESTINATION KEY (person2_id) REFERENCES person (id)
+      LABEL Knows PROPERTIES (since)
+  );
+
+-- Who knows whom, with the year on the edge:
+SELECT * FROM GRAPH_TABLE(social
+  MATCH (a:Person)-[e:Knows]->(b:Person)
+  COLUMNS (a.name AS knower, b.name AS known, e.since AS year));
+
+-- Two-hop reach (friends of friends):
+SELECT * FROM GRAPH_TABLE(social
+  MATCH (a:Person)-[:Knows]->(b:Person)-[:Knows]->(c:Person)
+  COLUMNS (a.name AS src, c.name AS reached));`,
+    };
+
+    function seedEditor(which) {
+      editor.value = EXAMPLES[which] || EXAMPLES.tour;
+      // The semantic-search example calls embed() in SQL, which needs a provider
+      // registered on the db first. Install the toy demo embedder now so "Run all"
+      // works out of the box; a real app would register its own model here.
+      if (which === "embed" && db) {
+        try {
+          db.setEmbedFn(demoEmbed, DEMO_DIMS);
+        } catch {
+          // Older/stale artifact without the setEmbedFn bridge — surface it in
+          // the editor rather than failing silently when the user hits Run.
+          editor.value =
+            `-- NOTE: this wasm build predates db.setEmbedFn(); embed() has no provider,\n` +
+            `-- so the query below will error. Rebuild the web target to enable it.\n\n` +
+            editor.value;
+        }
+      }
+    }
+
+    // "Load example" dropdown: toggle open, close on outside-click / Escape,
+    // and load + close on an item click.
+    const exampleMenu = $("exampleMenu");
+    const exampleBtn = $("exampleBtn");
+    function setMenu(open) {
+      exampleMenu.hidden = !open;
+      exampleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    exampleBtn.onclick = (e) => {
+      e.stopPropagation();
+      setMenu(exampleMenu.hidden);
+    };
+    document.addEventListener("click", (e) => {
+      if (!$("exampleDrop").contains(e.target)) setMenu(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") setMenu(false);
+    });
+    for (const btn of document.querySelectorAll("button.example")) {
+      btn.onclick = () => {
+        seedEditor(btn.dataset.ex);
+        setMenu(false);
+        editor.focus();
+        editor.selectionStart = editor.selectionEnd = 0;
+      };
+    }
+
+    // ── util ─────────────────────────────────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]),
+      );
+    }
+
+    // Trigger a browser download of a CSV string as a .csv file.
+    function downloadCsv(csv) {
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "zengram-lite-result.csv";
+      document.body.append(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // Everything above is declared; now boot. (Must be last — see the note by
+    // `let db`.)
+    await boot();
+  </script>
+</body>
+</html>

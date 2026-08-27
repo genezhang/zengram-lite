@@ -27,11 +27,12 @@ jobs:
           for f in scripts/*.sh; do
             bash -n "$f"
           done
-      # Any pure JS glue tests the demo grows (none today) run here; guarded so
-      # an empty set is not a failure.
+      # The demo's SQL playground ships hand-authored JS glue (statement router,
+      # editor, formatter) with pure unit tests — no wasm import — so they run
+      # here. globstar is required for the demo/**/ recursion.
       - name: JS glue unit tests (if any)
         run: |
-          shopt -s nullglob
+          shopt -s nullglob globstar
           tests=(demo/**/*.test.mjs)
           if [ ${#tests[@]} -gt 0 ]; then
             node --test "${tests[@]}"

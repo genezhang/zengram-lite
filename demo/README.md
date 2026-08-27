@@ -16,9 +16,14 @@ alongside the memory tier. This demo folder has two pages, both loading the one
 `pkg-web/zengram_wasm.js`:
 
 - **`index.html`** — the agent-memory demo (`remember` / `recall` by meaning).
-- **`sql.html`** — a SQL playground exercising `ZetaDb` directly: DDL, bound
-  params (`$1`, `$2`), aggregates, CTEs, window functions, transactions with
-  savepoints, and JSONB. No second engine, no second download.
+- **`playground/index.html`** — the full in-browser SQL playground exercising
+  `ZetaDb` directly: a CodeMirror editor, a psql-style command router (`\d`,
+  `\dt`, `USE`/`RESET database`), OPFS snapshot save/restore, CSV export, and
+  worked examples (DDL, bound `$1`/`$2` params, aggregates, CTEs, window
+  functions, vectors, FTS, JSONB, PGQ graph, branching, concurrent SI
+  transactions). It's the same playground shipped by
+  [zeta-lite](https://github.com/genezhang/zeta-lite), running on this superset
+  bundle — no second engine, no second download.
 
 A page that needs both memory *and* SQL imports only zengram-lite, so the engine
 loads exactly once.
