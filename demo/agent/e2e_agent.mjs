@@ -157,6 +157,39 @@ assert(/green tea/.test(memText), "memory sidebar shows the remembered fact (rea
 
 assert(chatCalls === 2, `LLM was called twice (tool round-trip), got ${chatCalls}`);
 
+// ── persistence across a reload (exercises the debounced close-flush) ────────
+// The per-turn save is throttled (60s), so an immediate reload would lose the
+// write UNLESS the tab-hidden flush fires. Dispatch visibilitychange→hidden to
+// trigger flushNow(), wait for the OPFS snapshot to be written, then reload and
+// confirm the fact rehydrates from OPFS (not just in-memory state).
+await page.evaluate(async () => {
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+});
+// Wait for the snapshot file to land — with a SHORT timeout well under the 60s
+// throttle, so only the immediate close-flush (not the ordinary timer) can
+// satisfy this. A broken visibilitychange handler would time out here.
+await page.waitForFunction(
+  async () => {
+    try {
+      const root = await navigator.storage.getDirectory();
+      await root.getFileHandle("agent-mem.zeta", { create: false });
+      return true; // snapshot file exists → close-flush completed
+    } catch { return false; }
+  },
+  { timeout: 3000, polling: 100 },
+);
+assert(true, "close-flush wrote the memory snapshot to OPFS");
+
+await page.reload({ waitUntil: "domcontentloaded" });
+await page.waitForSelector("#status.ready", { timeout: 20000 });
+await page.waitForFunction(
+  () => document.querySelectorAll("#mems .mem").length >= 1,
+  { timeout: 10000 },
+);
+const afterReload = await page.$eval("#mems", (e) => e.textContent);
+assert(/green tea/.test(afterReload), "fact survives a reload (rehydrated from the OPFS snapshot)");
+
 if (process.env.E2E_SHOT) {
   await page.screenshot({ path: process.env.E2E_SHOT, fullPage: true });
   console.log("   screenshot →", process.env.E2E_SHOT);

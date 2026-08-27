@@ -158,6 +158,12 @@
 
       let mem = null, llm = null, tools = null, history = null;
       let opfsOk = true; // false → run in-memory, files disabled
+      let memDirty = false; // true after a memory write → snapshot on next persist()
+
+      // Memory-mutating tools: only these change the snapshot's contents, so only
+      // these dirty it. Reads (recall/query) and the file tools (which persist
+      // themselves as their own OPFS files) never touch the memory snapshot.
+      const MEM_WRITE_TOOLS = new Set(["remember", "confirm", "contradict"]);
 
       // ── config persistence ────────────────────────────────────────────────
       function loadConfig() {
@@ -215,6 +221,11 @@
         } else if (evt.type === "tool-result") {
           const d = stepNodes.get(evt.id);
           if (d) d.querySelector(".res").textContent = truncate(evt.text, 2000);
+          // Mark memory dirty only when a memory-writing tool actually succeeded
+          // (a thrown tool error comes back as an "ERROR: …" result string).
+          if (MEM_WRITE_TOOLS.has(evt.name) && !/^ERROR:/.test(String(evt.text))) {
+            memDirty = true;
+          }
         } else if (evt.type === "error") {
           bubble("err", evt.message);
         }
@@ -298,10 +309,53 @@
         try { await opfs.writeFileText(DIM_FILE, String(dim)); } catch { /* ignore */ }
         return m;
       }
-      async function persist() {
-        if (!opfsOk || !mem) return;
-        try { await opfs.saveToOpfs(SNAPSHOT, mem.exportSnapshot()); } catch { /* ignore */ }
+      // ── memory persistence: dirty flag + throttle + flush-on-close ─────────
+      // exportSnapshot() serializes the WHOLE database, so each save is O(memory
+      // size). To bound write volume without an incremental-save API (the wasm
+      // layer exposes only export/openFromSnapshot), we (1) skip read-only turns
+      // via memDirty and (2) throttle writes: the first dirty turn arms a timer
+      // and later writes within the window ride the same timer, so a run of
+      // remembers becomes one save. The window is the max spacing between saves
+      // while actively adding facts AND the max data lost on a *hard* crash —
+      // a clean tab-hide/close is covered by the flush below. Human-paced, so a
+      // minute is generous; it needn't track typing rhythm (writes inside one
+      // turn coalesce regardless).
+      const PERSIST_THROTTLE_MS = 60000;
+      let persistTimer = null;
+
+      async function flushNow() {
+        if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+        if (!opfsOk || !mem || !memDirty) return;
+        // Capture-then-clear: exportSnapshot() reads state synchronously, so clear
+        // the flag BEFORE it. If a new write lands during the async save, it
+        // re-sets memDirty and gets picked up by the next flush — clearing after
+        // the await would instead clobber that signal and drop the write.
+        const bytes = mem.exportSnapshot();
+        memDirty = false;
+        try {
+          await opfs.saveToOpfs(SNAPSHOT, bytes);
+        } catch {
+          memDirty = true; // save failed — stay dirty so a later turn/close retries
+        }
       }
+
+      // Called after each turn: schedule a save if memory changed. Coalesces —
+      // an already-armed timer keeps its deadline, so N writes in a window = 1 save.
+      function persist() {
+        if (!opfsOk || !mem || !memDirty || persistTimer) return;
+        persistTimer = setTimeout(() => { persistTimer = null; flushNow(); }, PERSIST_THROTTLE_MS);
+      }
+
+      // Flush a pending save when the tab is backgrounded or closing. The
+      // visibilitychange→hidden path is what actually saves you: it fires while
+      // the tab still runs, so its async write generally completes. beforeunload
+      // is a best-effort backstop that often can't finish an async write, so we
+      // don't rely on it. Neither handler can await; a hard kill mid-window can
+      // still lose up to one throttle window of facts.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushNow();
+      });
+      window.addEventListener("beforeunload", () => { flushNow(); });
 
       // ── connect / boot ────────────────────────────────────────────────────
       async function connect() {
@@ -336,7 +390,7 @@
           bubble("err", "agent error: " + ((e && e.message) || e));
         } finally {
           thinking.remove();
-          await persist();
+          persist(); // schedules a debounced save if memory changed this turn
           refreshMemory(); await refreshFiles();
           $send.disabled = false; $input.disabled = false; $input.focus();
         }

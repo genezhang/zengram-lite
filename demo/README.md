@@ -224,10 +224,24 @@ wrong and it calls `confirm(id)` / `contradict(id)`, nudging the confidence bar.
 
 ### 5. Persistence — memory survives a full shutdown
 
-**After every turn**, the agent snapshots its memory to an OPFS file
-(`agent-mem.zeta`) — see `persist()` in `index.html`. This is incremental, *not* a
-save-on-exit hook: even a crash or force-quit loses at most the in-flight turn,
-never your stored facts. To see it:
+When memory changes, the agent snapshots it to an OPFS file (`agent-mem.zeta`) —
+see `persist()` / `flushNow()` in `index.html`. Two things keep the write cost
+low without losing data:
+
+- **Read-only turns don't write.** A `remember`/`confirm`/`contradict` marks
+  memory dirty; a turn that only recalls or answers never re-saves.
+- **Writes are throttled (~60 s) and flushed on close.** A run of new facts
+  coalesces into one save instead of one-per-turn. When the tab is hidden or
+  closing (`visibilitychange` / `beforeunload`), any pending save is flushed — so
+  a clean quit loses nothing, and a hard crash (kill / power loss) loses at most
+  one throttle window (~60 s) of facts.
+
+Each save rewrites the whole snapshot (the wasm layer exposes `exportSnapshot` /
+`openFromSnapshot`, not an incremental delta), so size grows with the number of
+**remembered facts** — not with conversation length, which isn't stored. At a few
+KB per fact (mostly the embedding vector) this is negligible for personal use;
+`decay(halfLifeDays)` can fade stale facts to bound it over months. To see
+persistence work:
 
 1. Store a few facts.
 2. **Fully quit the browser** (not just the tab).
