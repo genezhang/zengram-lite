@@ -42,7 +42,8 @@ loads exactly once.
 ```
  index.html  (this demo — pure HTML/JS, no build step)
    ├─ ./pkg-web/zengram_wasm.js  ← the memory bundle (wasm + JS glue)
-   │     └─ ZengramMemory: open / remember / recall / rememberWithVector / …
+   │     └─ ZengramMemory: open / remember / recall / rememberWithVector /
+   │         confirm / contradict / decay / factsAboutPeer / query / …
    └─ @huggingface/transformers  ← the embedding model (CDN)
 ```
 
@@ -97,6 +98,11 @@ uses the vector path with all-MiniLM-L6-v2.
 - **Persistence works.** `exportSnapshot()` / `openFromSnapshot()` round-trip the
   whole database (including the `tsvector` FTS column) — store the blob in OPFS to
   survive a reload.
-- **Fact extraction / reflection** are not wired yet — `remember` stores what you
-  give it verbatim; it doesn't split prose into atomic facts (needs a
+- **Deterministic ops are available** even without a model: `confirm(id)` /
+  `contradict(id)` adjust a fact's confidence, `decay(halfLifeDays)` fades stale
+  facts, `factsAboutPeer(peer, limit)` queries peer-attributed facts, and
+  `query(sql, params)` runs raw SQL over the memory tables (ZetaDb's
+  `{columns, rows}` shape).
+- **Automatic fact extraction / reflection** are not wired yet — `remember` stores
+  what you give it verbatim; it doesn't split prose into atomic facts (needs a
   completion-model callback). Embedding + recall are fully working.
