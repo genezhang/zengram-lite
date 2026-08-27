@@ -32,6 +32,10 @@ loads exactly once.
 
 - **Semantic recall.** Ask "what UI theme do I like?" and it recalls "prefers
   dark mode" — zero shared keywords. Real embeddings, real vector search.
+- **Deterministic memory ops, live.** The sidebar is built from `mem.query()`
+  (raw SQL over the `knowledge` table); 👍/👎 on each fact call `confirm(id)` /
+  `contradict(id)` and the confidence/importance bars move, and **Decay** calls
+  `decay(halfLifeDays)`. All no-model, no-embedder — pure database work.
 - **Fully local.** The database (Zeta), the vector index (HNSW), and the
   embedding model all run in the browser. Nothing leaves the tab.
 - **Concurrent-SI transactional store** underneath — the same engine as the

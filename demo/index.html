@@ -40,7 +40,20 @@
       .mem { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
         padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
       .mem .subj { color: var(--accent2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+      .mem .meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+      .mem .bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+      .mem .bar > span { display: block; height: 100%; background: var(--accent); }
+      .mem .num { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .mem .ops { display: flex; gap: 6px; margin-top: 8px; }
+      .mem .ops button { padding: 3px 9px; font-size: 12px; font-weight: 500;
+        background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
+      .mem .ops button:hover:not(:disabled) { border-color: var(--accent); }
+      .opsbar { display: flex; gap: 8px; align-items: center; margin: 4px 0 14px; }
+      .opsbar button { padding: 5px 10px; font-size: 12px; font-weight: 500;
+        background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
+      .opsbar .lbl { font-size: 11px; color: var(--muted); }
       aside .hint { font-size: 12px; color: var(--muted); margin-top: 12px; }
+      aside .apihint { font-size: 11px; color: var(--muted); margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     </style>
   </head>
   <body>
@@ -59,7 +72,9 @@
           remembers them. Then ask questions ("what do I like?") — it recalls the
           relevant ones by <em>meaning</em>, not keywords. Fully local: the DB is
           Zeta compiled to wasm, and a real sentence-embedding model
-          (all-MiniLM-L6-v2) runs in this tab.
+          (all-MiniLM-L6-v2) runs in this tab. Use 👍/👎 and <b>Decay</b> in the
+          sidebar to adjust each memory's confidence and importance — no model
+          needed for those.
         </div>
       </div>
       <form id="form">
@@ -70,9 +85,16 @@
 
     <aside>
       <h2>Memory (this scope)</h2>
+      <div class="opsbar">
+        <button id="decay" title="Apply exponential importance decay (7-day half-life) across all facts">Decay ½ = 7d</button>
+        <span class="lbl" id="decaymsg"></span>
+      </div>
       <div id="mems"></div>
       <div class="hint">Each fact is embedded with a real model and stored. Questions
         run a hybrid vector+text recall over what's stored — matching on meaning.</div>
+      <div class="apihint">This panel is built from <b>mem.query(sql)</b>. 👍/👎 call
+        <b>confirm(id)</b>/<b>contradict(id)</b>; the bars show confidence &amp;
+        importance. All deterministic — no model needed.</div>
     </aside>
 
     <script type="module">
@@ -91,6 +113,8 @@
       const $send = document.getElementById("send");
       const $status = document.getElementById("status");
       const $mems = document.getElementById("mems");
+      const $decay = document.getElementById("decay");
+      const $decaymsg = document.getElementById("decaymsg");
 
       function bubble(cls, text, recalled) {
         const d = document.createElement("div");
@@ -108,7 +132,6 @@
       }
 
       let mem, extractor;
-      const seen = [];
 
       // Real sentence embedding → Float32Array(384). setEmbedFn needs a SYNC
       // callback, so we use the async model + the bring-your-own-vector API
@@ -130,14 +153,49 @@
         const words = t.replace(/^(i|my|the|a|an)\s+/i, "").split(/\s+/).slice(0, 3).join(" ");
         return { subject: words || "note", content: t };
       }
+
+      // The sidebar is driven entirely by mem.query() — a live read of the
+      // memory database's own `knowledge` table, so it reflects whatever the
+      // deterministic ops (confirm/contradict/decay) do to each fact.
+      function loadFacts() {
+        const r = mem.query(
+          `SELECT id, subject, content, confidence, importance,
+                  times_confirmed, times_contradicted
+           FROM knowledge WHERE scope = $1 AND status = 'active'
+           ORDER BY importance DESC, time_updated DESC`,
+          [SCOPE],
+        );
+        return r.rows;
+      }
+      function factCount() {
+        return mem.query(
+          "SELECT count(*) AS c FROM knowledge WHERE scope = $1 AND status = 'active'",
+          [SCOPE],
+        ).rows[0].c;
+      }
       function refreshSidebar() {
         $mems.innerHTML = "";
-        for (const f of seen) {
+        for (const f of loadFacts()) {
+          const conf = Number(f.confidence) || 0;
+          const imp = Number(f.importance) || 0;
           const d = document.createElement("div");
           d.className = "mem";
-          d.innerHTML = `<span class="subj"></span><div class="c"></div>`;
+          d.innerHTML =
+            `<span class="subj"></span><div class="c"></div>` +
+            `<div class="meta"><span class="num">conf</span>` +
+            `<div class="bar"><span style="width:${Math.round(conf * 100)}%"></span></div>` +
+            `<span class="num cval"></span></div>` +
+            `<div class="meta"><span class="num">imp&nbsp;</span>` +
+            `<div class="bar"><span style="width:${Math.round(imp * 100)}%;background:var(--accent2)"></span></div>` +
+            `<span class="num ival"></span></div>` +
+            `<div class="ops"><button class="up">👍 confirm</button>` +
+            `<button class="down">👎 contradict</button></div>`;
           d.querySelector(".subj").textContent = f.subject;
           d.querySelector(".c").textContent = f.content;
+          d.querySelector(".cval").textContent = conf.toFixed(2);
+          d.querySelector(".ival").textContent = imp.toFixed(2);
+          d.querySelector(".up").addEventListener("click", () => { mem.confirm(f.id); refreshSidebar(); });
+          d.querySelector(".down").addEventListener("click", () => { mem.contradict(f.id); refreshSidebar(); });
           $mems.appendChild(d);
         }
       }
@@ -159,7 +217,6 @@
           const { subject, content } = toFact(text);
           const v = await embed(`${subject}: ${content}`);
           mem.rememberWithVector(subject, content, SCOPE, v);
-          seen.push({ subject, content });
           refreshSidebar();
           bubble("agent", `Got it — I'll remember that. (stored under "${subject}")`);
         }
@@ -197,8 +254,20 @@
         } finally {
           thinking.remove();
           $send.disabled = false; $input.disabled = false; $input.focus();
-          $status.textContent = `ready · ${seen.length} fact${seen.length === 1 ? "" : "s"} stored`;
+          const n = factCount();
+          $status.textContent = `ready · ${n} fact${n === 1 ? "" : "s"} stored`;
         }
+      });
+
+      // Decay button: exponential importance decay with a 7-day half-life,
+      // charging only the time since each fact's last decay. Deterministic —
+      // returns the number of facts updated. (Effects are subtle on freshly
+      // created facts; it's here to show the API and the returned count.)
+      $decay.addEventListener("click", () => {
+        if (!mem) return;
+        const n = mem.decay(7);
+        $decaymsg.textContent = `decayed ${n} fact${n === 1 ? "" : "s"}`;
+        refreshSidebar();
       });
     </script>
   </body>
