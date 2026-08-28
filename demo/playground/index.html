@@ -329,6 +329,8 @@
       color: var(--text-faint); font-size: 10px; width: 8px;
     }
     details.table-node[open] > summary .tw { transform: rotate(90deg); }
+    details.table-node.fw-group > summary { color: var(--accent); }
+    details.table-node.fw-group .table-node { margin-left: 12px; }
     .col-list { margin: 0 0 4px 22px; padding: 0; list-style: none; }
     .col-list li {
       font-family: var(--mono); font-size: 12px;
@@ -1029,6 +1031,49 @@
     // NOTE: db.schema() lists ALL databases' tables (it does not yet filter by
     // the selected database) — per-database sidebar filtering is a documented
     // follow-up. Switching the database still re-scopes query execution.
+    // Framework tables (shared-engine mode) — the reserved names from
+    // docs/engine-modes.md (keep in sync). Grouped under one collapsible node
+    // so attaching memory doesn't flood the sidebar with a dozen tables.
+    const FRAMEWORK_TABLES = new Set([
+      "event_log", "embedding", "session", "knowledge", "turn",
+      "tool_call", "provenance", "reminder", "permission", "episodic",
+      "_zengram_migrations",
+    ]);
+
+    // One sidebar node per table: expandable column list; clicking the name
+    // (not the twisty) inserts a SELECT.
+    function tableNode(tbl) {
+      const t = tbl.name;
+      const node = document.createElement("details");
+      node.className = "table-node";
+      const summary = document.createElement("summary");
+      summary.innerHTML = `<span class="tw">▶</span>`;
+      const name = document.createElement("span");
+      name.textContent = t;
+      summary.append(name);
+      name.addEventListener("click", (e) => {
+        e.preventDefault();
+        insertSelect(t);
+      });
+      node.append(summary);
+
+      const ul = document.createElement("ul");
+      ul.className = "col-list";
+      for (const c of tbl.columns || []) {
+        const li = document.createElement("li");
+        const nm = document.createElement("span");
+        nm.textContent = c.name + (c.pk ? " 🔑" : "");
+        const ty = document.createElement("span");
+        ty.className = "ctype";
+        ty.textContent = (c.type || "").toLowerCase() + (c.nullable ? "" : " ·nn");
+        li.append(nm, ty);
+        li.title = `${c.name} ${c.type}${c.nullable ? "" : " NOT NULL"}${c.pk ? " PRIMARY KEY" : ""}`;
+        ul.append(li);
+      }
+      node.append(ul);
+      return node;
+    }
+
     function refreshSchema() {
       const body = $("schemaBody");
       let tables;
@@ -1043,37 +1088,31 @@
         return;
       }
       body.innerHTML = "";
-      for (const tbl of tables) {
-        const t = tbl.name;
-        const node = document.createElement("details");
-        node.className = "table-node";
+      const fw = tables.filter((t) => FRAMEWORK_TABLES.has(t.name));
+      const user = tables.filter((t) => !FRAMEWORK_TABLES.has(t.name));
+      for (const tbl of user) body.append(tableNode(tbl));
+      if (user.length === 0) {
+        const hint = document.createElement("div");
+        hint.className = "schema-empty";
+        hint.textContent = "Your tables appear here — run some DDL.";
+        body.append(hint);
+      }
+      if (fw.length) {
+        // Framework tables under one collapsed group — a dozen reserved
+        // tables shouldn't out-shine the app's own.
+        const group = document.createElement("details");
+        group.className = "table-node fw-group";
         const summary = document.createElement("summary");
         summary.innerHTML = `<span class="tw">▶</span>`;
-        const name = document.createElement("span");
-        name.textContent = t;
-        summary.append(name);
-        // Click the name (not the twisty) → insert a SELECT.
-        name.addEventListener("click", (e) => {
-          e.preventDefault();
-          insertSelect(t);
-        });
-        node.append(summary);
-
-        const ul = document.createElement("ul");
-        ul.className = "col-list";
-        for (const c of tbl.columns || []) {
-          const li = document.createElement("li");
-          const nm = document.createElement("span");
-          nm.textContent = c.name + (c.pk ? " 🔑" : "");
-          const ty = document.createElement("span");
-          ty.className = "ctype";
-          ty.textContent = (c.type || "").toLowerCase() + (c.nullable ? "" : " ·nn");
-          li.append(nm, ty);
-          li.title = `${c.name} ${c.type}${c.nullable ? "" : " NOT NULL"}${c.pk ? " PRIMARY KEY" : ""}`;
-          ul.append(li);
-        }
-        node.append(ul);
-        body.append(node);
+        const label = document.createElement("span");
+        label.textContent = `🧠 zengram memory (${fw.length})`;
+        label.title =
+          "Tables created by the memory framework (shared-engine mode) — " +
+          "reserved names, see docs/engine-modes.md.";
+        summary.append(label);
+        group.append(summary);
+        for (const tbl of fw) group.append(tableNode(tbl));
+        body.append(group);
       }
     }
     $("refreshSchema").onclick = refreshSchema;
@@ -1085,7 +1124,8 @@
     // ZengramMemory.overEngine(): the framework's idempotent migrations create
     // its tables (knowledge, embedding, event_log, … — see
     // docs/engine-modes.md) in this same catalog, so they show up in the
-    // schema sidebar and are queryable with plain SQL. Migrations are tracked
+    // schema sidebar (grouped under 🧠 zengram memory) and are queryable with
+    // plain SQL. Migrations are tracked
     // in _zengram_migrations, so re-attaching — or attaching over a restored
     // snapshot that already has the tables — is safe.
     const MEMORY_DIM = 384; // matches the agent-memory demo (all-MiniLM-L6-v2)
@@ -1104,8 +1144,8 @@
         $("persistNote").innerHTML =
           "Memory attached over this database (shared engine) — the framework's tables " +
           "(<code>knowledge</code>, <code>embedding</code>, <code>event_log</code>, …) are now in the " +
-          "catalog. Click a table name in the sidebar to inspect it, or load the " +
-          "<b>Memory tables</b> example.";
+          "catalog, grouped under <b>🧠 zengram memory</b> in the sidebar. Expand it and click a " +
+          "table name to inspect, or load the <b>Memory tables</b> example.";
       } catch (e) {
         setStatus(`memory attach failed: ${e.message || e}`, false);
       }
