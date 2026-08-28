@@ -1491,6 +1491,10 @@ SELECT * FROM GRAPH_TABLE(social
 -- "🧠 Memory tables" button (shared-engine mode — docs/engine-modes.md).
 -- The framework created them with idempotent migrations; they share this
 -- catalog with your own tables.
+--
+-- These tables form the framework's internal model — a coherent system with
+-- invariants. Inspect them freely, but drive the framework through its API
+-- (remember/recall/…), not raw SQL.
 
 -- What the framework stores for each remembered fact:
 SELECT id, subject, content, scope,

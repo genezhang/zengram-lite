@@ -84,9 +84,29 @@ since they are one database.
 - **Reflection** — not wired yet.
 - Everything else in [api.md](./api.md) is fully functional.
 
+## The framework is a coherent system — not a pile of parts
+
+The framework's tables (`knowledge`, `embedding`, `session`, `turn`,
+`tool_call`, `provenance`, `reminder`, `permission`, `episodic`, …) are
+interrelated and bound by invariants the framework maintains. They are not a
+bag of tables to assemble against with raw SQL — driving the framework with
+ad-hoc statements is like being handed a pile of components and asked to
+build a car. The supported interface is the **typed API**
+([api.md](./api.md)); `query()` is for *inspecting* the memory surface, not
+for driving the framework's internals. The relationships between the tables
+live in the framework's source — which is the reference for them.
+
 ## Source availability
 
-The **Zengram framework** (the memory tier) is intended to be open-sourced;
-the **Zeta engine** remains closed. Until the framework repo is public, this
-document plus [api.md](./api.md) are the behavioral reference for what the
-memory tier does.
+- **Zengram framework** (the memory tier): open source — publication pending.
+  This is the part that makes the system legible: the table relationships,
+  the invariants, the APIs.
+- **Zeta engine**: closed source, like Zengram itself. Documented at the SQL
+  level by zeta-lite's `docs/sql_reference.md`.
+- **zengram-lite artifact**: a prebuilt binary. The glue crate
+  (`zengram-wasm`) links `zeta-wasm` + the framework into one cdylib and must
+  be built in the closed monorepo, so the `.wasm` is *distributed*, not
+  buildable from public source alone — the same model as zeta-lite.
+
+Until the framework repo is public, this document plus [api.md](./api.md) are
+the behavioral reference for what the memory tier does.

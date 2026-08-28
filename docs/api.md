@@ -93,6 +93,7 @@ Pure database work — they run even before you wire an embedder.
 
 | Method | Returns | Effect |
 | --- | --- | --- |
+| `mem.ensureProject(scope)` | project id (`string`) | Ensure a project row exists for `scope` (optional — `remember` works without it). |
 | `mem.confirm(id)` | — | Fact seen/validated again → raise its confidence. |
 | `mem.contradict(id)` | — | Fact was wrong → lower its confidence. |
 | `mem.decay(halfLifeDays)` | `number` (facts updated) | Exponential importance decay with the given half-life; charges only the time since each fact's last decay. |
@@ -165,6 +166,17 @@ Transactions are snapshot-isolated and concurrent — see the playground's
 
 ⚠ Advertised as part of the superset bundle (README), but not exercised by any
 demo or test in this repo. Check the `.d.ts` for its shape.
+
+## In the bundle, not yet exposed
+
+The `zengram-mem` *lite* build compiles more of the framework into the
+`.wasm` than the JS surface above currently exposes: sessions/turns/tool
+calls, episodic memory, provenance, the event log, reminders, permissions,
+token-budgeted context assembly, knowledge extraction/reflection, and
+in-browser memory branching. Today those tables are reachable only by
+inspecting them with `query()` — a wider JS surface is planned. (Fleet
+coordination, pgwire, and OKF ingest are excluded from the browser build by
+design: they belong server-side and pull native dependencies.)
 
 ## Result shapes
 

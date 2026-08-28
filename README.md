@@ -152,8 +152,11 @@ the deterministic ops (confirm/contradict/decay/factsAboutPeer/query) are fully
 wired; automatic fact-extraction and reflection are stubs pending a
 completion-model callback. Single database per engine.
 
-The Zengram framework source is planned to be open-sourced (the Zeta engine
-remains closed); until it is, [docs/how-it-works.md](./docs/how-it-works.md)
+The Zengram framework is open source (publication pending) — only the Zeta
+engine is closed, like Zengram itself. The zengram-lite `.wasm` is a prebuilt
+binary linking both (built from `zeta-wasm` + `zengram-wasm` in the monorepo),
+so it is distributed as an artifact rather than built from public source.
+Until the framework repo is public, [docs/how-it-works.md](./docs/how-it-works.md)
 documents the memory tier's behavior.
 
 ## License
