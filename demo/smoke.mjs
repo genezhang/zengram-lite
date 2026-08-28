@@ -12,7 +12,7 @@
 //        target/wasm32-unknown-unknown/release/zengram_wasm.wasm
 //   3. node harness/smoke.mjs
 
-import { ZengramMemory } from "./pkg/zengram_wasm.js";
+import { ZengramMemory, ZetaDb } from "./pkg/zengram_wasm.js";
 
 const DIM = 64;
 
@@ -72,34 +72,108 @@ assert(
 );
 
 // 4) Snapshot round-trip — export, reopen, recall survives.
-// KNOWN LIMITATION (Zeta engine): the catalog-log encoder does not yet support
-// DataType::Tsvector, and the memory schema's `embedding.fts` column is a
-// tsvector (FTS). So exportSnapshot currently throws. Treat it as a known gap
-// rather than a demo failure — remember/recall (the core) are fully working.
-let snapshotOk = false;
-try {
-  const blob = mem.exportSnapshot();
-  console.log("exported snapshot:", blob.length, "bytes");
-  const mem2 = ZengramMemory.openFromSnapshot(blob, DIM);
-  mem2.setEmbedFn(toyEmbed, DIM);
-  const hits2 = mem2.recall("dark mode in the editor", scope);
-  assert(
-    hits2.some((h) => h.content.includes("dark mode")),
-    "recall should still work after snapshot restore",
-  );
-  console.log("snapshot restore OK, recall survives");
-  snapshotOk = true;
-} catch (e) {
-  const msg = String(e && e.message ? e.message : e);
-  if (msg.includes("Tsvector")) {
-    console.log(
-      "snapshot SKIPPED — known Zeta gap: catalog-log encoder lacks DataType::Tsvector\n" +
-        "  (the embedding.fts FTS column can't be serialized yet; remember/recall unaffected)",
-    );
-  } else {
-    throw e;
-  }
-}
+// The memory schema's `embedding.fts` column is a tsvector; the catalog-log
+// encoder now supports DataType::Tsvector, so a full export/restore works.
+const blob = mem.exportSnapshot();
+console.log("exported snapshot:", blob.length, "bytes");
+const mem2 = ZengramMemory.openFromSnapshot(blob, DIM);
+mem2.setEmbedFn(toyEmbed, DIM);
+const hits2 = mem2.recall("dark mode in the editor", scope);
+assert(
+  hits2.some((h) => h.content.includes("dark mode")),
+  "recall should still work after snapshot restore",
+);
+console.log("snapshot restore OK, recall survives");
 
-console.log(`\nPASS — ${checks} checks${snapshotOk ? "" : " (snapshot skipped — known gap)"}`);
+// 5) No-LLM knowledge ops: confirm / contradict / decay / factsAboutPeer / query.
+// These are deterministic (no embedder needed), so they run on the restored mem.
+const beforeConf = mem2
+  .query("SELECT confidence FROM knowledge WHERE id = $1", [id1])
+  .rows[0].confidence;
+mem2.confirm(id1);
+const afterConf = mem2
+  .query("SELECT confidence FROM knowledge WHERE id = $1", [id1])
+  .rows[0].confidence;
+assert(afterConf > beforeConf, "confirm() raises confidence");
+
+mem2.contradict(id1);
+const afterContra = mem2
+  .query("SELECT confidence FROM knowledge WHERE id = $1", [id1])
+  .rows[0].confidence;
+assert(afterContra < afterConf, "contradict() lowers confidence");
+console.log("confirm/contradict move confidence:", beforeConf.toFixed(2), "→", afterConf.toFixed(2), "→", afterContra.toFixed(2));
+
+const decayed = mem2.decay(30);
+assert(typeof decayed === "number" && decayed >= 1, "decay() returns a count of updated facts");
+console.log("decay(30) touched", decayed, "facts");
+
+// query() escape hatch returns the ZetaDb {columns, rows} shape.
+const all = mem2.query("SELECT id, subject FROM knowledge ORDER BY subject", []);
+assert(Array.isArray(all.columns) && Array.isArray(all.rows), "query() returns {columns, rows}");
+assert(all.rows.length >= 3, "query() sees the seeded facts");
+assert(all.columns.includes("subject"), "query() column names present");
+console.log("query() over memory tables:", all.rows.length, "knowledge rows");
+
+// factsAboutPeer() returns [] when nothing is peer-attributed (none seeded here).
+const peerFacts = mem2.factsAboutPeer("nobody", 10);
+assert(Array.isArray(peerFacts) && peerFacts.length === 0, "factsAboutPeer() with no matches is []");
+console.log("factsAboutPeer('nobody') -> [] as expected");
+
+// With attribution: a fact's subject_peer marks who it is about. remember() has
+// no peer parameter in v0.1 — set it via query().
+mem2.query("UPDATE knowledge SET subject_peer = $1 WHERE id = $2", ["peer-dana", id2]);
+const danaFacts = mem2.factsAboutPeer("peer-dana", 10);
+assert(danaFacts.length === 1, "factsAboutPeer() finds the attributed fact");
+assert(
+  danaFacts[0].id === id2 &&
+  danaFacts[0].scope === scope &&
+  danaFacts[0].subject === "drink prefs" &&
+  typeof danaFacts[0].importance === "number",
+  "factsAboutPeer() element shape {id, scope, subject, content, importance}",
+);
+console.log("factsAboutPeer('peer-dana') ->", danaFacts.length, "fact(s)");
+
+// 6) Engine surface (same bundle): txn rollback / savepoints / streaming cursor.
+const db = ZetaDb.open();
+db.execDdl("CREATE TABLE smoke_t (id INTEGER PRIMARY KEY, v TEXT)");
+db.execMut("INSERT INTO smoke_t VALUES ($1, $2)", [1, "baseline"]);
+
+// rollback() discards the txn's writes; the pre-txn state is intact.
+const tx = db.begin();
+tx.execMut("INSERT INTO smoke_t VALUES ($1, $2)", [2, "in-txn"]);
+tx.rollback();
+assert(
+  db.query("SELECT count(*) AS c FROM smoke_t").rows[0].c === 1,
+  "rollback() discards the txn's writes",
+);
+
+// Savepoints: undo back to one, keeping the earlier writes.
+const tx2 = db.begin();
+tx2.execMut("INSERT INTO smoke_t VALUES ($1, $2)", [3, "keep"]);
+tx2.savepoint("sp");
+tx2.execMut("INSERT INTO smoke_t VALUES ($1, $2)", [4, "undo-me"]);
+tx2.rollbackToSavepoint("sp");
+tx2.commit();
+assert(
+  db.query("SELECT count(*) AS c FROM smoke_t").rows[0].c === 2,
+  "rollbackToSavepoint() undoes only the post-savepoint writes",
+);
+
+// Streaming cursor: next() -> row object | null (null past the end).
+const cur = db.stream("SELECT id, v FROM smoke_t ORDER BY id");
+assert(
+  JSON.stringify(cur.columns()) === JSON.stringify(["id", "v"]),
+  "cursor columns()",
+);
+const streamed = [];
+let row;
+while ((row = cur.next()) !== null) streamed.push(row);
+assert(
+  streamed.length === 2 && streamed[0].id === 1 && streamed[1].v === "keep",
+  "cursor streams every row",
+);
+assert(cur.next() === null, "cursor.next() is null past the end");
+cur.free();
+
+console.log(`\nPASS — ${checks} checks`);
 

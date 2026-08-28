@@ -28,7 +28,8 @@ fully client-side, no server, no network.
   **gitignored** — the compiled `.wasm` is fetched, not committed.
 - `scripts/` — `fetch-artifact.sh` (pull the published wasm) and
   `build-from-source.sh` (rebuild from the monorepo; maintainers only).
-- `docs/` — engine modes and preview notes.
+- `docs/` — [API reference](./docs/api.md), [how the memory works](./docs/how-it-works.md), and [engine modes](./docs/engine-modes.md).
+- `examples/` — [hello.mjs](./examples/hello.mjs), a minimal runnable tour of the memory tier (Node).
 - `LICENSE` — Zengram Lite License (free commercial use; not open source).
 
 **This repo does not contain the framework or engine source.** The compiled
@@ -49,9 +50,16 @@ python3 -m http.server -d demo 8080
 
 ## Use as a library (npm)
 
+> **Status:** the `zengram-lite` npm package is pending publication (v0.1.0).
+> Until then, the bundle comes from `scripts/build-from-source.sh` (needs the
+> monorepo); `scripts/fetch-artifact.sh` works once the package is live.
+
 ```bash
 npm install zengram-lite
 ```
+
+Full method reference — every `ZengramMemory` / `ZetaDb` method with return
+shapes: [docs/api.md](./docs/api.md).
 
 ```js
 import { ZengramMemory } from "zengram-lite";
@@ -139,10 +147,19 @@ const mem2 = ZengramMemory.openFromSnapshot(blob, 384);
 
 ## Status & limitations
 
-v0.1 preview. In-memory engine; durability is snapshot-based. Embed, recall, and
-the deterministic ops (confirm/contradict/decay/factsAboutPeer/query) are fully
-wired; automatic fact-extraction and reflection are stubs pending a
-completion-model callback. Single database per engine.
+v0.1 preview. In-memory engine; durability is snapshot-based. Embed, recall,
+the deterministic ops (confirm/contradict/decay/factsAboutPeer/query), and the
+agent surface (sessions/turns/tool calls/context assembly) are fully wired;
+fact-extraction and reflection are bring-your-own-result — call your completion
+model in JS, then hand the results to `extractWithFacts` / `reflectWithInsights`
+(see [docs/api.md](./docs/api.md)).
+
+The Zengram framework is open source (publication pending) — only the Zeta
+engine is closed, like Zengram itself. The zengram-lite `.wasm` is a prebuilt
+binary linking both (built from `zeta-wasm` + `zengram-wasm` in the monorepo),
+so it is distributed as an artifact rather than built from public source.
+Until the framework repo is public, [docs/how-it-works.md](./docs/how-it-works.md)
+documents the memory tier's behavior.
 
 ## License
 

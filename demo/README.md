@@ -9,6 +9,13 @@ This is [zengram](https://github.com/genezhang/zengram)'s memory tier
 sentence-embedding model (all-MiniLM-L6-v2) running in the same tab via
 [Transformers.js](https://github.com/huggingface/transformers.js).
 
+## Docs
+
+- [API reference](../docs/api.md) — every `ZengramMemory` / `ZetaDb` method, with return shapes.
+- [How the memory works](../docs/how-it-works.md) — the knowledge model, recall, confidence/decay, persistence.
+- [Engine modes](../docs/engine-modes.md) — own vs shared engine, reserved table names.
+- [examples/hello.mjs](../examples/hello.mjs) — minimal runnable tour (Node).
+
 ## Three pages, one bundle
 
 zengram-lite is a **superset** — the same `.wasm` carries the full Zeta SQL engine
@@ -86,12 +93,17 @@ ask `what do you know about me?` or `what language am I using?`.
 ## Headless smoke tests (Node)
 
 ```bash
-node smoke.mjs          # toy deterministic embedder (setEmbedFn path)
+node smoke.mjs          # memory core + engine surface: txn/rollback/savepoints/streaming (toy embedder)
+node smoke_agent.mjs    # agent surface: sessions/turns/tool calls/context/LLM bridges
 npm install @huggingface/transformers && node smoke_model.mjs   # real model (vector path)
 ```
 
-`smoke_model.mjs` proves real semantic recall — queries with **zero keyword
-overlap** with the stored facts still retrieve the right ones.
+`smoke_agent.mjs` walks the full agent loop — `createSession` →
+`appendTurn`/`addPart` → `recordToolCall`/`completeToolCall` →
+`assembleContext` → `extractWithFacts` → `reflectWithInsights` — against the
+nodejs bundle (27 checks). `smoke_model.mjs` proves real semantic recall —
+queries with **zero keyword overlap** with the stored facts still retrieve the
+right ones.
 
 ## Headless browser E2E (Playwright)
 
