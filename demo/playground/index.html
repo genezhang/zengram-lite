@@ -560,6 +560,7 @@
           <button class="example" role="menuitem" data-ex="branching">Branching</button>
           <button class="example" role="menuitem" data-ex="multidb">Multi-database</button>
           <button class="example" role="menuitem" data-ex="pgq">Graph (SQL/PGQ)</button>
+          <button class="example" role="menuitem" data-ex="memory">Memory tables</button>
         </div>
       </div>
     </div>
@@ -572,6 +573,7 @@
       <button class="btn primary" id="runBtn">Run<span class="kbd">⌘/Ctrl ⏎</span></button>
       <button class="btn" id="runAllBtn">Run all<span class="kbd">⇧⌘/Ctrl ⏎</span></button>
       <button class="btn" id="shareBtn" title="Copy a link that pre-fills this SQL (shares the query text, not your data)">Share</button>
+      <button class="btn" id="memoryBtn" title="Attach the zengram memory framework to THIS database (shared-engine mode): its tables — knowledge, embedding, event_log, … — appear in the schema sidebar and are queryable like any table.">🧠 Memory tables</button>
       <span class="grow"></span>
       <button class="btn" id="clearBtn">Clear results</button>
     </div>
@@ -642,7 +644,7 @@
   <div class="boot-error" id="bootError" hidden></div>
 
   <script type="module">
-    import init, { ZetaDb } from "../pkg-web/zengram_wasm.js";
+    import init, { ZetaDb, ZengramMemory } from "../pkg-web/zengram_wasm.js";
     import { runAll, statementAtCursor } from "./console/router.mjs";
     import { resultToGrid, statusLine, resultToCsv } from "./console/format.mjs";
     import { loadFromOpfs, saveToOpfs, deleteFromOpfs } from "./opfs.mjs";
@@ -1076,6 +1078,39 @@
     }
     $("refreshSchema").onclick = refreshSchema;
 
+    // ── Memory framework tables (shared-engine mode) ────────────────────────
+    // The playground opens a plain ZetaDb — the memory framework's tables are
+    // NOT in it by default (the agent-memory demo opens its own isolated
+    // engine). "🧠 Memory tables" attaches memory to THIS database via
+    // ZengramMemory.overEngine(): the framework's idempotent migrations create
+    // its tables (knowledge, embedding, event_log, … — see
+    // docs/engine-modes.md) in this same catalog, so they show up in the
+    // schema sidebar and are queryable with plain SQL. Migrations are tracked
+    // in _zengram_migrations, so re-attaching — or attaching over a restored
+    // snapshot that already has the tables — is safe.
+    const MEMORY_DIM = 384; // matches the agent-memory demo (all-MiniLM-L6-v2)
+    let memAttached = false;
+    function attachMemory() {
+      if (!memAttached) {
+        ZengramMemory.overEngine(db, MEMORY_DIM);
+        memAttached = true;
+      }
+      refreshSchema();
+    }
+    $("memoryBtn").onclick = () => {
+      try {
+        attachMemory();
+        setStatus("memory attached · shared engine", false);
+        $("persistNote").innerHTML =
+          "Memory attached over this database (shared engine) — the framework's tables " +
+          "(<code>knowledge</code>, <code>embedding</code>, <code>event_log</code>, …) are now in the " +
+          "catalog. Click a table name in the sidebar to inspect it, or load the " +
+          "<b>Memory tables</b> example.";
+      } catch (e) {
+        setStatus(`memory attach failed: ${e.message || e}`, false);
+      }
+    };
+
     function insertSelect(t) {
       // Double-quote the identifier (and escape embedded quotes) so a table named
       // e.g. `my table` or `select` produces valid SQL.
@@ -1116,6 +1151,7 @@
     // reload restores your last Save.
     $("clearSessionBtn").onclick = () => {
       db = ZetaDb.open();
+      memAttached = false; // fresh database — no memory tables in it
       clearResults();
       setStatus("in-memory", false);
       $("persistNote").innerHTML =
@@ -1219,8 +1255,9 @@
     // bag-of-words over a tiny fixed vocabulary. It exists only so embed() has
     // SOMETHING to call in the playground — there is deliberately no built-in
     // model in the browser build. Real apps register their own model (e.g.
-    // Transformers.js, or an embedding API) via db.setEmbedFn(fn, dims). See
-    // docs/sql_reference.md → "Wiring embed() from JS".
+    // Transformers.js, or an embedding API) via db.setEmbedFn(fn, dims). The
+    // SQL language reference (incl. "Wiring embed() from JS") lives in the
+    // zeta-lite repo: docs/sql_reference.md.
     const DEMO_VOCAB = ["apple", "red", "green", "ocean", "sky", "blue"];
     const DEMO_DIMS = DEMO_VOCAB.length;
     function demoEmbed(text) {
@@ -1284,8 +1321,8 @@ LIMIT 3;`,
       embed: `-- Semantic search with embed(). In this build embed() is compiled in
 -- but has NO built-in model — you register one from JS. Loading this
 -- example wired a tiny demo embedder via db.setEmbedFn(fn, ${DEMO_DIMS}); a real
--- app plugs in Transformers.js or an embedding API the same way (see the
--- SQL reference, "Wiring embed() from JS").
+-- app plugs in Transformers.js or an embedding API the same way (see
+-- "Wiring embed() from JS" in the zeta-lite repo's docs/sql_reference.md).
 CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT, v VECTOR(${DEMO_DIMS}));
 
 -- Ingest: embed() turns each row's text into a vector, right inside SQL.
@@ -1409,6 +1446,23 @@ SELECT * FROM GRAPH_TABLE(social
 SELECT * FROM GRAPH_TABLE(social
   MATCH (a:Person)-[:Knows]->(b:Person)-[:Knows]->(c:Person)
   COLUMNS (a.name AS src, c.name AS reached));`,
+
+    memory: `-- The memory framework's tables, attached to THIS database by the
+-- "🧠 Memory tables" button (shared-engine mode — docs/engine-modes.md).
+-- The framework created them with idempotent migrations; they share this
+-- catalog with your own tables.
+
+-- What the framework stores for each remembered fact:
+SELECT id, subject, content, scope,
+       confidence, importance, status
+FROM knowledge
+ORDER BY importance DESC, time_updated DESC
+LIMIT 20;
+
+-- Reserved framework tables (avoid these names in your own DDL):
+--   event_log  embedding  session  knowledge  turn
+--   tool_call  provenance  reminder  permission  episodic
+--   _zengram_migrations`,
     };
 
     function seedEditor(which) {
@@ -1425,6 +1479,15 @@ SELECT * FROM GRAPH_TABLE(social
           editor.value =
             `-- NOTE: this wasm build predates db.setEmbedFn(); embed() has no provider,\n` +
             `-- so the query below will error. Rebuild the web target to enable it.\n\n` +
+            editor.value;
+        }
+      }
+      if (which === "memory" && db) {
+        try {
+          attachMemory(); // shared-engine mode — idempotent
+        } catch (e) {
+          editor.value =
+            `-- NOTE: attaching the memory framework failed: ${e.message || e}\n\n` +
             editor.value;
         }
       }
