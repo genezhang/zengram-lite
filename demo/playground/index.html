@@ -1523,10 +1523,9 @@ FROM knowledge
 ORDER BY importance DESC, time_updated DESC
 LIMIT 20;
 
--- Reserved framework tables (avoid these names in your own DDL):
---   event_log  embedding  session  knowledge  turn
---   tool_call  provenance  reminder  permission  episodic
---   _zengram_migrations`,
+-- Reserved framework tables (avoid these names in your own DDL): the full
+-- set is the "🧠 zengram memory" group in the sidebar (46 tables in the
+-- current build) — docs/engine-modes.md lists them all.`,
     };
 
     function seedEditor(which) {

@@ -147,10 +147,12 @@ const mem2 = ZengramMemory.openFromSnapshot(blob, 384);
 
 ## Status & limitations
 
-v0.1 preview. In-memory engine; durability is snapshot-based. Embed, recall, and
-the deterministic ops (confirm/contradict/decay/factsAboutPeer/query) are fully
-wired; automatic fact-extraction and reflection are stubs pending a
-completion-model callback. Single database per engine.
+v0.1 preview. In-memory engine; durability is snapshot-based. Embed, recall,
+the deterministic ops (confirm/contradict/decay/factsAboutPeer/query), and the
+agent surface (sessions/turns/tool calls/context assembly) are fully wired;
+fact-extraction and reflection are bring-your-own-result — call your completion
+model in JS, then hand the results to `extractWithFacts` / `reflectWithInsights`
+(see [docs/api.md](./docs/api.md)).
 
 The Zengram framework is open source (publication pending) — only the Zeta
 engine is closed, like Zengram itself. The zengram-lite `.wasm` is a prebuilt

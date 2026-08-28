@@ -21,13 +21,13 @@ A **fact** is a row in the framework's `knowledge` table:
 | `time_updated` | last update — drives decay |
 | `times_confirmed` / `times_contradicted` | counters behind 👍 / 👎 |
 
-(The columns above are the ones the demos query. The framework also reserves
-other tables in the catalog — `event_log`, `embedding`, `session`, `turn`,
-`tool_call`, `provenance`, `reminder`, `permission`, `episodic`, plus the
-migration bookkeeping table `_zengram_migrations` — see
-[engine-modes.md](./engine-modes.md). In the SQL playground, the
+(The columns above are the ones the demos query. The framework also creates
+46 other tables in the catalog — `session`, `turn`, `tool_call`, `embedding`,
+`provenance`, `event_log`, `reminder`, `permission_rule`, … — the full list
+is in [engine-modes.md](./engine-modes.md). In the SQL playground, the
 **🧠 Memory tables** button attaches the framework to the playground's
-database so you can inspect all of them.)
+database so you can inspect all of them, grouped under **🧠 zengram
+memory** in the sidebar.)
 
 ## Remember
 
@@ -38,9 +38,10 @@ and stores it; it returns the knowledge id. Async models use
 Facts with the **same subject** in a scope are treated as updates
 (supersede/dedup), not duplicates — store distinct subjects for distinct facts.
 
-`remember` stores what you give it **verbatim**: v0.1 does not split prose
-into atomic facts (automatic fact-extraction is a stub pending a
-completion-model callback).
+`remember` stores what you give it **verbatim** — it does not split prose
+into atomic facts. For automatic extraction, call your completion model in JS
+and hand the results to `extractWithFacts` (bring-your-own-result — see
+[api.md](./api.md)).
 
 ## Recall
 
@@ -77,18 +78,21 @@ Snapshots are origin-agnostic bytes — store them in OPFS, IndexedDB, or ship
 them wherever. In shared-engine mode a snapshot includes your SQL tables too,
 since they are one database.
 
-## What's stubbed in v0.1
+## What's bring-your-own-result in v0.1
 
-- **Automatic fact-extraction** — `remember` stores verbatim; it won't split
-  prose into atomic facts until a completion-model callback is wired.
-- **Reflection** — not wired yet.
-- Everything else in [api.md](./api.md) is fully functional.
+The framework's LLM-dependent steps (fact-extraction, reflection) can't call
+an async JS model from the synchronous wasm surface, so they take finished
+results instead: call your completion model in JS, then hand the results to
+`extractWithFacts` / `reflectWithInsights` — the framework runs its normal
+code paths (dedup, supersession, embedding, provenance) over them. Everything
+else in [api.md](./api.md) is fully functional.
 
 ## The framework is a coherent system — not a pile of parts
 
 The framework's tables (`knowledge`, `embedding`, `session`, `turn`,
-`tool_call`, `provenance`, `reminder`, `permission`, `episodic`, …) are
-interrelated and bound by invariants the framework maintains. They are not a
+`tool_call`, `provenance`, `reminder`, `permission_rule`, … — 46 in the
+current build; see [engine-modes.md](./engine-modes.md)) are interrelated and
+bound by invariants the framework maintains. They are not a
 bag of tables to assemble against with raw SQL — driving the framework with
 ad-hoc statements is like being handed a pile of components and asked to
 build a car. The supported interface is the **typed API**
