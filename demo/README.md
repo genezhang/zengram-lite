@@ -9,6 +9,13 @@ This is [zengram](https://github.com/genezhang/zengram)'s memory tier
 sentence-embedding model (all-MiniLM-L6-v2) running in the same tab via
 [Transformers.js](https://github.com/huggingface/transformers.js).
 
+## Docs
+
+- [API reference](../docs/api.md) — every `ZengramMemory` / `ZetaDb` method, with return shapes.
+- [How the memory works](../docs/how-it-works.md) — the knowledge model, recall, confidence/decay, persistence.
+- [Engine modes](../docs/engine-modes.md) — own vs shared engine, reserved table names.
+- [examples/hello.mjs](../examples/hello.mjs) — minimal runnable tour (Node).
+
 ## Three pages, one bundle
 
 zengram-lite is a **superset** — the same `.wasm` carries the full Zeta SQL engine
