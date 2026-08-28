@@ -204,6 +204,7 @@ Positional `$1`/`$2` binds in `query` / `execMut`.
 | `db.begin()` | `ZetaTxn` | Explicit snapshot-isolated transaction. |
 | `db.stream(sql, params?)` | `ZetaCursor` | Bounded streaming cursor — memory is O(batch), not O(result). See *ZetaCursor*. |
 | `db.exportSnapshot()` | `Uint8Array` | Whole database. |
+| `db.checkpoint()` | — | Force a durable checkpoint. **No-op in the browser build** (in-memory backend) — use `exportSnapshot` there; it flushes committed rows on the server-side persistence path. |
 | `db.databases()` | `string[]` | Databases in the catalog (logical namespaces over the one shared catalog — see the playground's *Multi-database* example). |
 | `db.database()` | `string \| null` | Current database; `null` = the system default (`"zeta"`). |
 | `db.setDatabase(name \| null)` | — | Switch the current database. The embedded SQL path has no `USE` statement, so this is the only way. |
@@ -211,6 +212,9 @@ Positional `$1`/`$2` binds in `query` / `execMut`.
 | `db.setBranch(name \| null)` | — | Switch branches. The embedded SQL path rejects `SET zeta_branch`, so this is the only way. |
 | `db.schema()` | `{ tables: [{ name, columns: [{ name, type, pk, nullable }] }] }` | Catalog introspection (no `information_schema` in this build). Lists **all** databases' tables — it does not yet filter by the current database. |
 | `db.setEmbedFn(fn, dims)` | — | Register a JS embedder for the SQL `embed()` function. |
+
+Every handle (`ZetaDb`, `ZetaTxn`, `ZetaCursor`, `ZengramMemory`) also has a
+`free()` for explicit early release — optional; GC reclaims them otherwise.
 
 The SQL *language* itself (types, FTS, vectors, JSONB, PGQ, branching, …) is
 documented in the **zeta-lite** repo's `docs/sql_reference.md` — the
