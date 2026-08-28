@@ -44,5 +44,12 @@ rm -rf "$dest/pkg-web"; wasm-bindgen --target web    --out-dir "$dest/pkg-web" "
 echo "==> wasm-bindgen --target nodejs -> $dest/pkg/ (smoke tests)"
 rm -rf "$dest/pkg"; wasm-bindgen --target nodejs --out-dir "$dest/pkg" "$wasm"
 
+# Node module-type markers for the generated bundles: the nodejs target is
+# CommonJS, the web target is an ES module. The repo root's package.json is
+# type:module, so without these the CJS nodejs bundle (demo/pkg/) would be
+# misread as ESM by Node and the smoke tests' named imports would fail.
+printf '{\n  "type": "commonjs"\n}\n' > "$dest/pkg/package.json"
+printf '{\n  "type": "module"\n}\n' > "$dest/pkg-web/package.json"
+
 echo "==> done. Serve demo over HTTP (python3 -m http.server -d demo 8080), or:"
 echo "    node demo/smoke.mjs"

@@ -112,6 +112,13 @@ else
   fi
 fi
 
+# Node module-type marker: the web target is an ES module. The repo root's
+# package.json is type:module (E2E tooling), so this is belt-and-suspenders —
+# but it also makes the bundle loadable from Node (e.g.
+# playground_validate.mjs) under any root config, and it ships with the
+# published artifact for the same reason.
+printf '{\n  "type": "module"\n}\n' > "$dest/package.json"
+
 echo "==> done. Artifact in $dest:"
 ls -la "$dest"
 echo

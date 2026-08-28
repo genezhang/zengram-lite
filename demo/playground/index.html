@@ -1034,10 +1034,30 @@
     // Framework tables (shared-engine mode) — the reserved names from
     // docs/engine-modes.md (keep in sync). Grouped under one collapsible node
     // so attaching memory doesn't flood the sidebar with a dozen tables.
+    // The memory framework's tables — the full set the current build's
+    // migrations create (see docs/engine-modes.md). The schema grows with the
+    // framework; unknown new tables show up as user tables until this set is
+    // updated (cosmetic only — the grouping, not the data, is affected).
     const FRAMEWORK_TABLES = new Set([
-      "event_log", "embedding", "session", "knowledge", "turn",
-      "tool_call", "provenance", "reminder", "permission", "episodic",
-      "_zengram_migrations",
+      // bookkeeping + config
+      "_zengram_config", "_zengram_migrations",
+      // core conversation
+      "project", "session", "branch", "turn", "part", "tool_call",
+      // knowledge
+      "knowledge", "embedding", "provenance", "peer", "token_estimate",
+      // intelligence + storage config
+      "extraction_config", "retrieval_config", "demotion_config", "storage_budget",
+      // events + state
+      "event_log", "snapshot", "state_snapshot", "environment",
+      // agents + tasks
+      "account", "account_state", "agent_mailbox", "agent_registry",
+      "mailbox_cursor", "subagent_run", "scheduled_job", "session_share",
+      "task", "task_dependency", "task_file", "reminder", "permission_rule",
+      // coding
+      "cg_degree", "cg_edge", "cg_file", "cg_node", "cg_source",
+      "file_operation", "file_reservation", "workspace", "workspace_file",
+      // OKF catalog
+      "okf_bundle", "okf_concept", "okf_link",
     ]);
 
     // One sidebar node per table: expandable column list; clicking the name

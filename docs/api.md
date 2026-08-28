@@ -100,6 +100,75 @@ Pure database work — they run even before you wire an embedder.
 | `mem.factsAboutPeer(peer, limit)` | facts ⚠ | Facts attributed to a peer (e.g. `"peer-dana"`), most important first. Element shape follows the knowledge row — check the `.d.ts`. |
 | `mem.query(sql, params?)` | `{ columns, rows }` | Raw SQL over the memory database, same shape as `ZetaDb.query`. Positional `$1`/`$2` binds; a write takes effect but returns an empty `rows` array. Prefer the typed methods for mutation — writing the framework's tables directly can break its invariants. |
 
+### Agent surface (sessions, turns, tool calls, context)
+
+The framework's core layer tracks the agent's conversation itself — not just
+the knowledge it derives. These methods expose that layer, so a browser agent
+can run its whole loop in the bundle: record the conversation, assemble the
+next prompt under a token budget, call its LLM, record tool calls, and store
+what it learned.
+
+**Sessions & turns**
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `mem.createSession(projectId, opts?)` | `{ sessionId, branchId }` | Ensure the project row and create a session with its trunk branch. `opts`: `{ title, agent, modelId, providerId, channelType }` — all optional. |
+| `mem.appendTurn(sessionId, branchId, role, opts?)` | turn id | `role`: `"user"` \| `"assistant"`. `opts`: `{ agent, parentTurnId }`. |
+| `mem.addPart(turnId, sessionId, partType, data, position)` | part id | A part is an atomic content unit of a turn. `data` is any JSON value (e.g. `{ text: "…" }` for a text part, `{ toolCallId }` for a tool part). |
+| `mem.completeTurn(turnId, tokensIn, tokensOut, costUsd, finishReason)` | — | Record token counts + finish reason. |
+| `mem.getTurns(sessionId, branchId, limit, offset)` | `Turn[]` | Oldest first. `Turn`: `{ id, role, agent, status, tier, tokensInput, tokensOutput, costUsd, finishReason, summary, timeCreated, timeCompleted }`. |
+| `mem.getParts(turnId)` | `Part[]` | In position order. `Part`: `{ id, type, data, position, timeCreated }`. |
+
+**Tool calls**
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `mem.recordToolCall(opts)` | tool-call id | `opts`: `{ turnId, partId, sessionId, toolId, input?, category?, targetPaths? }`. Starts in `pending` state. |
+| `mem.completeToolCall(toolCallId, opts?)` | — | `opts`: `{ output, error, durationMs, tokensConsumed }` — all optional. Setting `error` marks the call `error`; otherwise `completed`. |
+| `mem.queryToolCalls(sessionId, opts?)` | `ToolCall[]` | Newest first. `opts`: `{ toolId, category, state, limit }` — `state`: `"pending"` \| `"running"` \| `"completed"` \| `"error"`. |
+
+**Context assembly**
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `mem.assembleContext(sessionId, branchId, budget, opts?)` | `ContextWindow` | The framework's 6-phase prompt assembly (system → permission rules → knowledge → tasks → hot/warm/cold history → cross-branch summaries → pending state) under a token `budget`. `opts` (fractions of the budget, all optional): `{ knowledgeBudgetPct, taskBudgetPct, crossBranchBudgetPct, reservePct, hotBudgetPct }`. |
+| `mem.enforceBudget(scope)` | `{ sessionsPruned, bytesFreed }` \| `null` | Prune oldest sessions if the scope is over its configured storage budget; `null` when no budget is configured or the scope is under it. |
+
+`ContextWindow` shape:
+
+```js
+{
+  blocks: [{ type, content, tokenCount, sourceIds }],
+  // type: "system" | "permissionRules" | "knowledge" | "tasks" | "turn" | "branchSummary" | "pending"
+  totalTokens: number,
+  budget: number,
+  turnsIncluded: number,
+  turnsSummarized: number,
+  turnsSkipped: number,
+  knowledgeFingerprint: string,  // stable for an unchanged knowledge set — reuse signal for prompt prefixes / KV caches
+}
+```
+
+The knowledge phase reads the session's **project scope**
+(`/project/{projectId}`) plus the root scope (`/`), so store agent knowledge
+there (or in `/`) to have it injected.
+
+**Bring-your-own-result LLM bridges**
+
+The framework's automatic knowledge extraction and reflection call an LLM. In
+the browser the completion model lives in JS (async), so the surface uses a
+sync **bring-your-own-result** pattern — the same seam as
+`rememberWithVector`: call your model, hand the finished results in, and the
+framework runs its normal code paths (dedup, supersession, embedding via
+`setEmbedFn`, provenance).
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `mem.extractWithFacts(turnText, scope, sessionId, turnId, facts)` | knowledge ids (`string[]`) | `facts`: `[{ subject, content, categories? }]` — the atomic facts your LLM extracted from `turnText`. Each fact is embedded via `setEmbedFn` (must be registered) and stored with session/turn provenance. |
+| `mem.reflectWithInsights(scope, insights, limit)` | knowledge ids (`string[]`) | `insights`: `[{ subject, content, sourceIds? }]` — insights your LLM synthesized over the scope's knowledge. `limit` bounds how many recent knowledge entries the framework fetches first. No-op (empty array) when the scope has no active knowledge. |
+
+A full tour of this surface: `demo/smoke_agent.mjs`.
+
 ### Persistence
 
 | Method | Returns |
@@ -170,13 +239,14 @@ demo or test in this repo. Check the `.d.ts` for its shape.
 ## In the bundle, not yet exposed
 
 The `zengram-mem` *lite* build compiles more of the framework into the
-`.wasm` than the JS surface above currently exposes: sessions/turns/tool
-calls, episodic memory, provenance, the event log, reminders, permissions,
-token-budgeted context assembly, knowledge extraction/reflection, and
-in-browser memory branching. Today those tables are reachable only by
-inspecting them with `query()` — a wider JS surface is planned. (Fleet
-coordination, pgwire, and OKF ingest are excluded from the browser build by
-design: they belong server-side and pull native dependencies.)
+`.wasm` than the JS surface above currently exposes: episodic timelines
+(`session_timeline`, `turns_since`, …), provenance tracing (`traceBack` /
+`traceForward`), the event log, reminders, permission rules, turn
+summarization, and in-browser memory branching (`fork` / `merge` /
+`rebase`). Today those are reachable only by inspecting their tables with
+`query()` — a wider JS surface is planned. (Fleet coordination, pgwire, and
+OKF ingest are excluded from the browser build by design: they belong
+server-side and pull native dependencies.)
 
 ## Result shapes
 

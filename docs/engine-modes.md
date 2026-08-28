@@ -40,15 +40,27 @@ SQL alongside your own.
 ### Reserved table names (the shared-mode caveat)
 
 In shared mode, memory's tables share the catalog namespace with yours. Memory
-reserves the following names — **avoid creating app tables that collide with
-them:**
+reserves the names its schema migrations create — **avoid creating app tables
+that collide with them.** The current build reserves these 46 names:
 
 ```
-event_log      embedding      session        knowledge      turn
-tool_call      provenance     reminder       permission     episodic
+_zengram_config    _zengram_migrations   account            account_state
+agent_mailbox      agent_registry        branch            cg_degree
+cg_edge            cg_file               cg_node           cg_source
+demotion_config    embedding             environment       event_log
+extraction_config  file_operation        file_reservation  knowledge
+mailbox_cursor     okf_bundle            okf_concept       okf_link
+part               peer                  permission_rule   project
+provenance         reminder              retrieval_config  scheduled_job
+session            session_share         snapshot          state_snapshot
+storage_budget     subagent_run          task              task_dependency
+task_file          token_estimate        tool_call         turn
+workspace          workspace_file
 ```
 
-plus the migration bookkeeping table `_zengram_migrations`.
+(The list tracks the current build's migrations — the schema grows with the
+framework, so check `db.schema()` on your bundle for the authoritative set.
+The playground's 🧠 Memory tables grouping uses the same list.)
 
 Memory's schema migrations are **idempotent** (tracked in `_zengram_migrations`),
 so opening memory over an already-initialized engine is safe and cheap — the
