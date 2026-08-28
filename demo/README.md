@@ -93,7 +93,7 @@ ask `what do you know about me?` or `what language am I using?`.
 ## Headless smoke tests (Node)
 
 ```bash
-node smoke.mjs          # memory core: remember/recall/snapshot/no-LLM ops (toy embedder)
+node smoke.mjs          # memory core + engine surface: txn/rollback/savepoints/streaming (toy embedder)
 node smoke_agent.mjs    # agent surface: sessions/turns/tool calls/context/LLM bridges
 npm install @huggingface/transformers && node smoke_model.mjs   # real model (vector path)
 ```

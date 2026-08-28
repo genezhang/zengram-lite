@@ -9,9 +9,9 @@ agentic-memory tier plus the full **Zeta** SQL engine (`ZetaDb` / `ZetaTxn` /
 > IDE autocomplete. This page is the human reference: what each method does,
 > what it returns, and how the pieces fit.
 >
-> Items marked **⚠** are not exercised by this repo's demos or tests (they come
-> from the README or the engine's documented surface) — verify them against the
-> `.d.ts` before relying on them.
+> Every method on this page has been exercised against the current build
+> (the demos, the smoke tests, or direct probes). If a future build changes
+> behavior, the `.d.ts` is the first place to look.
 
 ## Loading the bundle
 
@@ -97,7 +97,7 @@ Pure database work — they run even before you wire an embedder.
 | `mem.confirm(id)` | — | Fact seen/validated again → raise its confidence. |
 | `mem.contradict(id)` | — | Fact was wrong → lower its confidence. |
 | `mem.decay(halfLifeDays)` | `number` (facts updated) | Exponential importance decay with the given half-life; charges only the time since each fact's last decay. |
-| `mem.factsAboutPeer(peer, limit)` | facts ⚠ | Facts attributed to a peer (e.g. `"peer-dana"`), most important first. Element shape follows the knowledge row — check the `.d.ts`. |
+| `mem.factsAboutPeer(peer, limit)` | `[{ id, scope, subject, content, importance }]` | Active facts attributed to a peer (e.g. `"peer-dana"`), most important first; `[]` when none. Attribution lives in `knowledge.subject_peer` — `remember()` has no peer parameter in v0.1, so set it with `query()` (`UPDATE knowledge SET subject_peer = $1 WHERE id = $2`). |
 | `mem.query(sql, params?)` | `{ columns, rows }` | Raw SQL over the memory database, same shape as `ZetaDb.query`. Positional `$1`/`$2` binds; a write takes effect but returns an empty `rows` array. Prefer the typed methods for mutation — writing the framework's tables directly can break its invariants. |
 
 ### Agent surface (sessions, turns, tool calls, context)
@@ -202,6 +202,7 @@ Positional `$1`/`$2` binds in `query` / `execMut`.
 | `ZetaDb.open()` | `ZetaDb` | Fresh in-memory database. |
 | `ZetaDb.openFromSnapshot(bytes)` | `ZetaDb` | Rehydrate from `exportSnapshot()`. |
 | `db.begin()` | `ZetaTxn` | Explicit snapshot-isolated transaction. |
+| `db.stream(sql, params?)` | `ZetaCursor` | Bounded streaming cursor — memory is O(batch), not O(result). See *ZetaCursor*. |
 | `db.exportSnapshot()` | `Uint8Array` | Whole database. |
 | `db.databases()` | `string[]` | Databases in the catalog (logical namespaces over the one shared catalog — see the playground's *Multi-database* example). |
 | `db.database()` | `string \| null` | Current database; `null` = the system default (`"zeta"`). |
@@ -218,23 +219,34 @@ bundle.
 
 ## ZetaTxn
 
-Returned by `db.begin()`. Same method names as `ZetaDb` for the statement
-paths, plus transaction control:
+Returned by `db.begin()`. Same statement methods as `ZetaDb`, plus
+transaction control:
 
-| Method | Returns |
-| --- | --- |
-| `txn.query(sql, params?)` | `{ columns, rows }` |
-| `txn.execMut(sql, params?)` | affected-row count |
-| `txn.commit()` | — |
-| `txn.rollback()` ⚠ | — |
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `txn.query(sql, params?)` | `{ columns, rows }` | |
+| `txn.execMut(sql, params?)` | affected-row count | |
+| `txn.execDdl(sql)` | — | |
+| `txn.commit()` | — | A second commit/rollback throws (`transaction already finished`). |
+| `txn.rollback()` | — | Discards everything the txn wrote; the pre-txn state is intact. |
+| `txn.savepoint(name)` | — | Establish a named savepoint. |
+| `txn.rollbackToSavepoint(name)` | — | Undo back to the savepoint, keeping it. |
+| `txn.releaseSavepoint(name)` | — | Release the savepoint without rolling back. |
 
 Transactions are snapshot-isolated and concurrent — see the playground's
 *Concurrent transactions* panel and `demo/playground/playground_validate.mjs`.
+An uncommitted txn rolls back on drop.
 
 ## ZetaCursor
 
-⚠ Advertised as part of the superset bundle (README), but not exercised by any
-demo or test in this repo. Check the `.d.ts` for its shape.
+Returned by `db.stream(sql, params?)` — a bounded streaming cursor over a
+query result (memory is O(batch), not O(result)):
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `cur.columns()` | `string[]` | Column names. |
+| `cur.next()` | row object \| `null` | Pulls the next row as `{ col: value, … }`; `null` at end of stream (keeps returning `null` past the end). |
+| `cur.free()` | — | Release early. Also `[Symbol.dispose]` for `using`/auto-cleanup. |
 
 ## In the bundle, not yet exposed
 
