@@ -4,7 +4,8 @@
   "description": "Browser build of zengram's agentic-memory tier (superset of zeta-lite). This repo ships the demo + build/fetch recipe; the wasm artifact is published separately.",
   "type": "module",
   "scripts": {
-    "e2e": "node demo/e2e_ops.mjs"
+    "e2e": "node demo/e2e_ops.mjs",
+    "e2e:agent": "node demo/agent/e2e_agent.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.0"
