@@ -35,8 +35,28 @@ echo "==> building zengram-wasm (release, wasm surface) from $crate"
     cargo build --release --no-default-features --features wasm \
     --target wasm32-unknown-unknown )
 
-wasm="$crate/target/wasm32-unknown-unknown/release/zengram_wasm.wasm"
-[[ -f "$wasm" ]] || wasm="$repo/target/wasm32-unknown-unknown/release/zengram_wasm.wasm"
+# zengram-wasm declares its own `[workspace]` (isolated, like zeta-embedded), so
+# cargo writes to the CRATE-local target/, not the monorepo root's — UNLESS a
+# machine-global CARGO_TARGET_DIR (or ~/.cargo/config target-dir) redirects it.
+# Honor an explicit CARGO_TARGET_DIR first, then the crate-local dir, then the
+# repo root — covering every layout instead of assuming one.
+rel="wasm32-unknown-unknown/release/zengram_wasm.wasm"
+wasm=""
+for cand in "${CARGO_TARGET_DIR:+$CARGO_TARGET_DIR/$rel}" \
+            "$crate/target/$rel" \
+            "$repo/target/$rel"; do
+  [[ -n "$cand" && -f "$cand" ]] && { wasm="$cand"; break; }
+done
+if [[ -z "$wasm" ]]; then
+  echo "!! built wasm not found. Looked in:" >&2
+  [[ -n "${CARGO_TARGET_DIR:-}" ]] && echo "   \$CARGO_TARGET_DIR/$rel" >&2
+  echo "   $crate/target/$rel" >&2
+  echo "   $repo/target/$rel" >&2
+  echo "   (zengram-wasm is an isolated workspace — its build lands in the" >&2
+  echo "    crate-local target/ unless CARGO_TARGET_DIR redirects it.)" >&2
+  exit 1
+fi
+echo "==> found wasm: $wasm"
 
 echo "==> wasm-bindgen --target web    -> $dest/pkg-web/ (browser demo)"
 rm -rf "$dest/pkg-web"; wasm-bindgen --target web    --out-dir "$dest/pkg-web" "$wasm"
