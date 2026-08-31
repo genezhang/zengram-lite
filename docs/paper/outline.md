@@ -152,6 +152,14 @@ embodiment, and functional coverage against the published artifact. v0.1 preview
   knowledge tier is HNSW+FTS over `knowledge`/`embedding`; recall is a hybrid
   query; branching (inherited) means memory can fork. Consistency across all
   three tiers is one transaction, not a cross-store 2PC problem.
+- **3.4 The schema as one system.** The 46-table schema shown as a **relationship
+  diagram** (**Figure 2**, `figures/fig2-schema.svg`), not a grouped list — this is
+  where the schema material lives (moved out of §7, where describing tables is not
+  evaluation). The FK spine (account→project→session→turn→part/tool_call, knowledge
+  scoped to project) plus the **teal provenance bridge** (knowledge ← provenance →
+  turn/tool_call) is the visual argument for "coherent system, not a pile of
+  tables." Config / persistence / compiled-in-not-yet-exposed sit off the spine.
+  Authoritative list referenced (`docs/engine-modes.md`, `db.schema()`), not dumped.
 
 ## 4. The Knowledge Tier
 - **4.1 What a fact is.** The `knowledge` row: subject, content, scope,
@@ -171,10 +179,10 @@ embodiment, and functional coverage against the published artifact. v0.1 preview
   it. (traceBack/traceForward in-bundle, not-yet-exposed — §8.)
 
 ## 5. The Session-Tracking Tier (the centerpiece)
-*(Figure 2 (`figures/fig2-context-assembly.svg`) anchors §5.3: session-state tables →
+*(Figure 3 (`figures/fig3-context-assembly.svg`) anchors §5.3: session-state tables →
 six-phase assembleContext under a budget gauge → typed ContextWindow, with the §7.2
 budget-eviction measurement rendered as a filled/hollow token-cell strip. Same SVG
-idiom and teal framework palette as Figure 1.)*
+idiom and teal framework palette as Figures 1–2.)*
 - **5.1 The conversation as data.** sessions → turns → **typed parts** →
   tool calls, each a table (`session`, `turn`, `part`, `tool_call`), with a trunk
   branch per session. Turns carry role, status, token counts, cost, finish reason;
@@ -249,13 +257,9 @@ artifact; reproducible from the public repo.)*
   (memory + full SQL engine + branching). Contrast the zeta-lite engine at 2.87 MB
   [ZL]: the entire agentic-memory framework adds ~0.08 MB gzip on top of the engine
   it already ships. Table: raw / gzip; delta vs zeta-lite.
-- **7.4 The schema, by tier.** The 46-table catalog grouped: knowledge/embedding;
-  session/turn/part/tool_call; provenance/event_log; project/account/environment;
-  config tables; and the in-bundle-not-yet-exposed set (tasks, reminders,
-  permission rules, code-graph, OKF, fleet). Names load-bearing tables; points to
-  `docs/engine-modes.md` + `db.schema()` for the authoritative list rather than
-  enumerating all 46 inline.
-- **7.5 End-to-end: the shipped local agent.** `demo/agent/` — loop, tools
+  *(The 46-table schema is NOT here — describing tables is architecture, not
+  evaluation, so it moved to §3.4 as the Figure 2 relationship diagram.)*
+- **7.4 End-to-end: the shipped local agent.** `demo/agent/` — loop, tools
   (memory/files/webFetch), and memory all in the tab; only LLM inference is a
   remote OpenAI-compatible call. Memory persists to OPFS across a full browser
   restart. This is the framework working as a system, not just its unit tests

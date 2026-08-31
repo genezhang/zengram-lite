@@ -242,6 +242,42 @@ same snapshot isolation. The alternative — a vector database beside a document
 beside a hand-rolled session log — has no single point of consistency; here there is
 one. This is the payoff of putting the framework on the engine rather than beside it.
 
+### 3.4 The schema as one system
+
+The concrete form of that payoff is the framework's schema, and it is worth seeing
+as a whole because it is the evidence for the claim that zengram-lite is a coherent
+system rather than a pile of tables. The current build defines 46 tables; Figure 2
+shows the load-bearing ones and the relationships among them, grouped by the tiers of
+§4–§5.
+
+**Figure 2. The framework schema, by tier. A foreign-key spine runs left to right — an account owns projects (which carry the scope string), a project owns sessions, and a session owns turns, each turn owning its typed parts and tool calls. Knowledge is scoped to a project (plus the root scope). The teal provenance bridge is the point: `provenance` ties a derived knowledge fact back to the exact turn and tool call that produced it, across tier boundaries, in one store under one snapshot. Configuration, persistence, and the compiled-in-but-not-yet-exposed tables sit apart from the spine.**
+
+![The framework schema, by tier](figures/fig2-schema.svg)
+
+The spine is ordinary relational structure: `account` → `project` → `session` →
+`turn` → `part` / `tool_call`, with `knowledge` scoped to a project and its
+`embedding` alongside. What makes it a memory framework rather than a set of logs is
+the **provenance bridge** — the teal edges in the figure. When the extraction seam
+(§6.2) stores a fact derived from a turn, `provenance` records which turn and which
+tool call it came from, so a recalled fact carries its origin across the tier
+boundary between knowledge and session. Because every one of these tables lives in
+the same MVCC store, that link is a foreign key under one snapshot, not a join across
+separate systems that can disagree.
+
+Three groups sit off the spine. **Configuration** tables (`retrieval_config`,
+`extraction_config`, `demotion_config`, `storage_budget`, `token_estimate`) hold one
+row per scope and tune recall, extraction, decay, and the storage budget that
+`enforceBudget` applies (§5.3). **Persistence** (`snapshot`, `state_snapshot`) is the
+whole-database snapshot codec of §6.4 — `exportSnapshot` serializes every table above
+into one blob. And a substantial set of tables is **compiled in but not yet exposed**
+as a typed surface (§8): task management, reminders, permission rules, subagent runs,
+a code graph, an object-knowledge format, and fleet/mailbox coordination. That the
+build already carries these — reachable via SQL today, typed later — indicates the
+scope of the closed Zengram framework this teaser fronts. The authoritative,
+always-current table list is in the repository (`docs/engine-modes.md`) and reachable
+at runtime via `db.schema()`; the set grows with the framework, and the reserved-name
+caveat of §6.3 tracks it.
+
 ---
 
 ## 4. The Knowledge Tier
@@ -351,13 +387,13 @@ The operation an agent performs most and a vector store helps with least is buil
 the next prompt. On every turn the agent has more material — system instructions,
 relevant knowledge, recent history, pending tool state — than fits the model's
 window, and must choose what to include. Zengram-lite makes this the framework's job.
-Figure 2 shows the whole path: the session-state tables on the left, the six-phase
+Figure 3 shows the whole path: the session-state tables on the left, the six-phase
 assembly under a budget in the middle, and the typed `ContextWindow` it returns on
 the right, with the measured budget-eviction result of §7.2 along the bottom.
 
-**Figure 2. Token-budgeted context assembly. `assembleContext` reads the session-state tables under one snapshot, packs them through six phases newest-first until the token budget binds, and returns a typed `ContextWindow` with per-block provenance and a reuse fingerprint. The bottom strip is the §7.2 measurement: at budget 200 only 3 of 12 turns are included (9 evicted); at budget 1000 and 4000 all 12 fit.**
+**Figure 3. Token-budgeted context assembly. `assembleContext` reads the session-state tables under one snapshot, packs them through six phases newest-first until the token budget binds, and returns a typed `ContextWindow` with per-block provenance and a reuse fingerprint. The bottom strip is the §7.2 measurement: at budget 200 only 3 of 12 turns are included (9 evicted); at budget 1000 and 4000 all 12 fit.**
 
-![Token-budgeted context assembly](figures/fig2-context-assembly.svg)
+![Token-budgeted context assembly](figures/fig3-context-assembly.svg)
 
 `assembleContext(sessionId, branchId, budget, opts?)` runs a **six-phase** assembly
 under a caller-supplied token budget. The phases, in order, are system instructions,
@@ -454,7 +490,7 @@ queried together. Both are first-class. In shared mode memory reserves the table
 names its migrations create, so the application avoids colliding with them; the
 migrations are idempotent (tracked in `_zengram_migrations`), so attaching memory over
 an already-initialized or snapshot-restored engine is safe and cheap. The reserved set
-is 46 names in the current build; §7.4 groups them and points to the authoritative
+is 46 names in the current build; §3.4 groups them and points to the authoritative
 list rather than reproducing it.
 
 ### 6.4 Persistence
@@ -541,35 +577,7 @@ zeta-lite for its database can load zengram-lite instead and gain the whole memo
 framework for a few percent more transfer, with no second engine and no second
 download.
 
-### 7.4 The schema, by tier
-
-The framework's schema is 46 tables in the current build. Rather than enumerate them,
-we group them by role:
-
-- **Knowledge**: `knowledge`, `embedding` — the fact store and its vectors.
-- **Session tracking**: `session`, `turn`, `part`, `tool_call`, `session_share` — the
-  conversation model of §5.
-- **Provenance and audit**: `provenance`, `event_log`, `file_operation` — where facts
-  and actions came from.
-- **Scoping and identity**: `project`, `account`, `account_state`, `environment`,
-  `peer`, `workspace`, `workspace_file`, `branch`.
-- **Configuration**: `_zengram_config`, `_zengram_migrations`, `retrieval_config`,
-  `extraction_config`, `demotion_config`, `storage_budget`, `token_estimate`.
-- **Persistence**: `snapshot`, `state_snapshot`.
-- **Compiled-in, not yet exposed** (§8): task management (`task`, `task_dependency`,
-  `task_file`, `scheduled_job`), reminders (`reminder`), permission rules
-  (`permission_rule`), subagent runs (`subagent_run`), a code graph (`cg_node`,
-  `cg_edge`, `cg_file`, `cg_source`, `cg_degree`), an object-knowledge format
-  (`okf_bundle`, `okf_concept`, `okf_link`), and fleet/mailbox coordination
-  (`agent_registry`, `agent_mailbox`, `mailbox_cursor`, `file_reservation`).
-
-The authoritative, always-current list is in the repository (`docs/engine-modes.md`)
-and is reachable at runtime via `db.schema()`; the set grows with the framework, and
-the reserved-name caveat of §6.3 tracks it. That the compiled build already carries
-tables for tasks, reminders, permissions, and coordination — reachable via SQL today,
-typed later — indicates the scope of the closed framework this build fronts.
-
-### 7.5 End to end: the shipped local agent
+### 7.4 End to end: the shipped local agent
 
 The strongest evidence that the framework is a working system, not a set of passing
 unit tests, is the local agent shipped in `demo/agent/`. Its loop, its tools

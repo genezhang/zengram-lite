@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 700" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="rel" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7.5,3 L0,6 z" fill="#556"/>
+    </marker>
+    <marker id="brg" markerWidth="10" markerHeight="10" refX="7.5" refY="3.2" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#2f8f9d"/>
+    </marker>
+    <style>
+      .gt{font-size:12px;fill:#4a4a5a;font-style:italic}
+      .tbl{font-size:12.5px;fill:#1f2430;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace}
+      .tblb{font-size:12.5px;fill:#1f2430;font-weight:700;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace}
+      .sub{font-size:10px;fill:#5a5f6a}
+      .card{font-size:10px;fill:#6a6f7a}
+      .rel{fill:none;stroke:#556;stroke-width:1.4}
+      .refl{fill:none;stroke:#9aa0aa;stroke-width:1.2;stroke-dasharray:3 3}
+      .brg{fill:none;stroke:#2f8f9d;stroke-width:2.2}
+      .brglab{font-size:11px;fill:#227a86;font-weight:600}
+      .leg{font-size:11px;fill:#555}
+      .faded{font-size:10px;fill:#8a8f98;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="700" fill="#ffffff"/>
+
+  <!-- ============ GROUP: Scoping & identity ============ -->
+  <rect x="24" y="60" width="216" height="286" rx="9" fill="#eef3fb" stroke="#b9cdec"/>
+  <text class="gt" x="40" y="82">Scoping &amp; identity</text>
+
+  <rect x="52" y="98" width="160" height="42" rx="6" fill="#ffffff" stroke="#3f6fc0"/>
+  <text class="tblb" text-anchor="middle" x="132" y="124">account</text>
+
+  <rect x="52" y="176" width="160" height="52" rx="6" fill="#ffffff" stroke="#3f6fc0"/>
+  <text class="tblb" text-anchor="middle" x="132" y="199">project</text>
+  <text class="sub" text-anchor="middle" x="132" y="216">holds the scope string</text>
+
+  <rect x="52" y="286" width="160" height="42" rx="6" fill="#ffffff" stroke="#3f6fc0"/>
+  <text class="tblb" text-anchor="middle" x="132" y="312">branch</text>
+
+  <!-- ============ GROUP: Session tracking ============ -->
+  <rect x="286" y="60" width="404" height="410" rx="9" fill="#e6f5f7" stroke="#5aa6b0"/>
+  <text class="gt" x="302" y="82">Session tracking</text>
+
+  <rect x="312" y="98" width="168" height="44" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="396" y="125">session</text>
+
+  <rect x="312" y="196" width="168" height="44" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="396" y="223">turn</text>
+
+  <rect x="312" y="300" width="168" height="48" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="396" y="322">part</text>
+  <text class="sub" text-anchor="middle" x="396" y="338">typed content unit</text>
+
+  <rect x="512" y="300" width="160" height="48" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="592" y="322">tool_call</text>
+  <text class="sub" text-anchor="middle" x="592" y="338">pending→done/error</text>
+
+  <!-- ============ GROUP: Knowledge ============ -->
+  <rect x="736" y="60" width="320" height="150" rx="9" fill="#e6f5f7" stroke="#5aa6b0"/>
+  <text class="gt" x="752" y="82">Knowledge</text>
+
+  <rect x="762" y="98" width="150" height="90" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="837" y="126">knowledge</text>
+  <text class="sub" text-anchor="middle" x="837" y="144">confidence · importance</text>
+  <text class="sub" text-anchor="middle" x="837" y="160">status · scope</text>
+
+  <rect x="944" y="120" width="94" height="46" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="991" y="141">embedding</text>
+  <text class="sub" text-anchor="middle" x="991" y="157">vector</text>
+
+  <!-- ============ Provenance bridge node ============ -->
+  <rect x="748" y="286" width="184" height="66" rx="6" fill="#d8eff2" stroke="#2f8f9d"/>
+  <text class="tblb" text-anchor="middle" x="840" y="312">provenance</text>
+  <text class="sub" text-anchor="middle" x="840" y="330">+ event_log ·</text>
+  <text class="sub" text-anchor="middle" x="840" y="344">file_operation (audit)</text>
+
+  <!-- ============ RELATIONSHIPS (spine) ============ -->
+  <!-- account -> project -->
+  <path class="rel" marker-end="url(#rel)" d="M132,140 L132,174"/>
+  <text class="card" x="138" y="160">1 : N</text>
+  <!-- project -> session (into session group) -->
+  <path class="rel" marker-end="url(#rel)" d="M212,202 C 268,206 292,140 310,124"/>
+  <text class="card" x="236" y="182">1 : N</text>
+  <!-- project -> branch -->
+  <path class="rel" marker-end="url(#rel)" d="M132,228 L132,284"/>
+  <text class="card" x="138" y="262">1 : N</text>
+  <!-- session -> turn -->
+  <path class="rel" marker-end="url(#rel)" d="M396,142 L396,194"/>
+  <text class="card" x="402" y="172">1 : N</text>
+  <!-- turn -> part -->
+  <path class="rel" marker-end="url(#rel)" d="M390,240 C 384,264 388,282 392,298"/>
+  <text class="card" x="352" y="274">1 : N</text>
+  <!-- turn -> tool_call -->
+  <path class="rel" marker-end="url(#rel)" d="M470,232 C 560,258 588,272 592,298"/>
+  <text class="card" x="548" y="262">1 : N</text>
+  <!-- part refs tool_call -->
+  <path class="refl" d="M480,326 L510,326"/>
+  <text class="card" text-anchor="middle" x="495" y="316">refs</text>
+  <!-- project -> knowledge (scope) -->
+  <path class="rel" marker-end="url(#rel)" d="M212,190 C 480,120 640,116 760,124"/>
+  <text class="card" text-anchor="middle" x="512" y="112">1 : N   scope = project + root</text>
+  <!-- knowledge -> embedding -->
+  <path class="rel" marker-end="url(#rel)" d="M912,150 L942,146"/>
+  <text class="card" text-anchor="middle" x="928" y="112">1 : 1</text>
+
+  <!-- ============ THE BRIDGE: knowledge <- provenance -> turn/tool_call ============ -->
+  <!-- knowledge -> provenance -->
+  <path class="brg" marker-end="url(#brg)" d="M837,188 L840,284"/>
+  <!-- provenance -> turn -->
+  <path class="brg" marker-end="url(#brg)" d="M760,300 C 600,270 500,244 472,232"/>
+  <!-- provenance -> tool_call -->
+  <path class="brg" marker-end="url(#brg)" d="M748,324 L676,324"/>
+  <text class="brglab" text-anchor="middle" x="600" y="386">provenance bridges the tiers: every derived fact traces back to the</text>
+  <text class="brglab" text-anchor="middle" x="600" y="402">turn and tool call that produced it (§4.4) — one store, one snapshot</text>
+
+  <!-- ============ BOTTOM STRIP: attached / whole-db / compiled-in ============ -->
+  <!-- Config per scope -->
+  <rect x="24" y="500" width="330" height="172" rx="9" fill="#fdf9f0" stroke="#e0c78a"/>
+  <text class="gt" x="40" y="522">Configuration — one row per scope</text>
+  <text class="tbl" x="44" y="548">retrieval_config · extraction_config</text>
+  <text class="tbl" x="44" y="570">demotion_config · storage_budget</text>
+  <text class="tbl" x="44" y="592">token_estimate</text>
+  <text class="sub" x="44" y="620">Tunes recall, extraction, decay, and the</text>
+  <text class="sub" x="44" y="636">storage budget enforceBudget() applies —</text>
+  <text class="sub" x="44" y="652">attached to a project scope, not the spine.</text>
+
+  <!-- Persistence -->
+  <rect x="370" y="500" width="316" height="172" rx="9" fill="#f7f7fa" stroke="#c4c4ce"/>
+  <text class="gt" x="386" y="522">Persistence — whole database</text>
+  <text class="tbl" x="390" y="548">snapshot · state_snapshot</text>
+  <text class="sub" x="390" y="576">exportSnapshot() serializes every table</text>
+  <text class="sub" x="390" y="592">above into one byte blob; openFromSnapshot</text>
+  <text class="sub" x="390" y="608">rehydrates it (§6.4). No per-row durability —</text>
+  <text class="sub" x="390" y="624">the snapshot is the unit.</text>
+
+  <!-- Compiled-in, not yet exposed -->
+  <rect x="702" y="500" width="354" height="172" rx="9" fill="#f4f4f6" stroke="#c9c9d1" stroke-dasharray="6 4"/>
+  <text class="gt" x="718" y="522" fill="#8a8f98">Compiled-in — not yet a typed surface (§8)</text>
+  <text class="faded" x="722" y="547">task · task_dependency · task_file · scheduled_job</text>
+  <text class="faded" x="722" y="568">reminder · permission_rule · subagent_run</text>
+  <text class="faded" x="722" y="589">cg_node · cg_edge · cg_file · cg_source · cg_degree</text>
+  <text class="faded" x="722" y="610">okf_bundle · okf_concept · okf_link</text>
+  <text class="faded" x="722" y="631">agent_registry · agent_mailbox · mailbox_cursor</text>
+  <text class="faded" x="722" y="652">file_reservation · workspace · workspace_file</text>
+
+  <!-- ============ legend ============ -->
+  <line class="rel" x1="360" y1="488" x2="392" y2="488" marker-end="url(#rel)"/>
+  <text class="leg" x="400" y="492">foreign-key relationship (1 : N unless noted)</text>
+  <line class="brg" x1="700" y1="488" x2="732" y2="488" marker-end="url(#brg)"/>
+  <text class="leg" x="740" y="492">provenance bridge across tiers</text>
+
+  <text class="sub" x="24" y="694" fill="#227a86">46 tables in the current build. Authoritative, always-current list: docs/engine-modes.md and db.schema() at runtime. Load-bearing tables and edges shown; the reserved-name caveat (§6.3) tracks the full set.</text>
+</svg>
