@@ -186,7 +186,13 @@ Zengram-lite is a framework, but it is not a framework in isolation: it runs ove
 the Zeta database engine, and much of what makes it viable in a browser is inherited
 from that engine rather than built anew. This section states what is inherited and
 points to the companion report [ZL] for the account of how; it deliberately does not
-re-derive the engine.
+re-derive the engine. Figure 1 gives the whole picture — the two API surfaces the
+one `.wasm` exports, the framework tiers, the shared engine core, and the seams that
+cross into the browser host.
+
+**Figure 1. Zengram-lite superset architecture: the Zengram framework tiers (teal) as tables and queries over the shared Zeta engine core (green, detailed in the zeta-lite report), inside one wasm module that also re-exports the SQL surface. The bring-your-own-result seam (teal, dashed) carries async model results from the JS side into the synchronous framework.**
+
+![Zengram-lite superset architecture](figures/fig1-architecture.svg)
 
 ### 3.1 What zengram-lite inherits
 
@@ -345,6 +351,13 @@ The operation an agent performs most and a vector store helps with least is buil
 the next prompt. On every turn the agent has more material — system instructions,
 relevant knowledge, recent history, pending tool state — than fits the model's
 window, and must choose what to include. Zengram-lite makes this the framework's job.
+Figure 2 shows the whole path: the session-state tables on the left, the six-phase
+assembly under a budget in the middle, and the typed `ContextWindow` it returns on
+the right, with the measured budget-eviction result of §7.2 along the bottom.
+
+**Figure 2. Token-budgeted context assembly. `assembleContext` reads the session-state tables under one snapshot, packs them through six phases newest-first until the token budget binds, and returns a typed `ContextWindow` with per-block provenance and a reuse fingerprint. The bottom strip is the §7.2 measurement: at budget 200 only 3 of 12 turns are included (9 evicted); at budget 1000 and 4000 all 12 fit.**
+
+![Token-budgeted context assembly](figures/fig2-context-assembly.svg)
 
 `assembleContext(sessionId, branchId, budget, opts?)` runs a **six-phase** assembly
 under a caller-supplied token budget. The phases, in order, are system instructions,

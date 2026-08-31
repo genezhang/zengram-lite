@@ -133,6 +133,11 @@ embodiment, and functional coverage against the published artifact. v0.1 preview
 
 ## 3. The Zeta Substrate (summary; full account in the zeta-lite report)
 *(One section. Summarize + cite [ZL]; do not re-derive.)*
+- **Figure 1** (`figures/fig1-architecture.svg`) — superset architecture, a matched
+  set with the zeta-lite report's Figure 1: same green engine core, same band
+  layout and legend idiom, with the new **teal** Zengram framework layer over it and
+  the **teal dashed** bring-your-own-result seam crossing in from the JS model side.
+  Hand-authored SVG (stable, print-quality); render-checked in headless Chrome.
 - **3.1 What zengram-lite inherits.** Log-centric async MVCC; overlapping
   snapshot-isolated transactions on one thread; a feature-complete Postgres
   surface (JSONB+GIN, FTS, HNSW vector, SQL/PGQ, multi-DB); **copy-on-write
@@ -166,6 +171,10 @@ embodiment, and functional coverage against the published artifact. v0.1 preview
   it. (traceBack/traceForward in-bundle, not-yet-exposed — §8.)
 
 ## 5. The Session-Tracking Tier (the centerpiece)
+*(Figure 2 (`figures/fig2-context-assembly.svg`) anchors §5.3: session-state tables →
+six-phase assembleContext under a budget gauge → typed ContextWindow, with the §7.2
+budget-eviction measurement rendered as a filled/hollow token-cell strip. Same SVG
+idiom and teal framework palette as Figure 1.)*
 - **5.1 The conversation as data.** sessions → turns → **typed parts** →
   tool calls, each a table (`session`, `turn`, `part`, `tool_call`), with a trunk
   branch per session. Turns carry role, status, token counts, cost, finish reason;

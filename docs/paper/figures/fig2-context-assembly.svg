@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 760" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7.5,3 L0,6 z" fill="#333"/>
+    </marker>
+    <style>
+      .title{font-size:12.5px;fill:#4a4a5a;font-style:italic}
+      .h{font-size:13px;fill:#227a86;font-weight:600}
+      .node{font-size:12px;fill:#1f2430}
+      .nodeb{font-size:12.5px;fill:#1f2430;font-weight:600}
+      .sub{font-size:10.5px;fill:#5a5f6a}
+      .mono{font-size:11px;fill:#1f2430;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace}
+      .monod{font-size:11px;fill:#227a86;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace;font-weight:600}
+      .ph{font-size:12px;fill:#1f2430}
+      .num{font-size:11px;fill:#227a86;font-weight:700}
+      .leg{font-size:11px;fill:#555}
+      .solid{fill:none;stroke:#333;stroke-width:1.7}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="760" fill="#ffffff"/>
+
+  <!-- ============ LEFT: session state tables ============ -->
+  <rect x="22" y="26" width="286" height="516" rx="9" fill="#eef7f8" stroke="#8fbfc7"/>
+  <text class="title" x="40" y="48">Session state — framework tables</text>
+
+  <!-- source rows -->
+  <rect x="42" y="66" width="246" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="56" y="86">System instructions</text>
+  <text class="sub" x="56" y="102">the agent's standing prompt</text>
+
+  <rect x="42" y="120" width="246" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="56" y="140">Permission rules</text>
+  <text class="sub" x="56" y="156">permission_rule</text>
+
+  <rect x="42" y="174" width="246" height="52" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="nodeb" x="56" y="194">Knowledge</text>
+  <text class="sub" x="56" y="210">knowledge — project scope + root scope</text>
+
+  <rect x="42" y="234" width="246" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="56" y="254">Tasks</text>
+  <text class="sub" x="56" y="270">task · task_dependency</text>
+
+  <rect x="42" y="288" width="246" height="60" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="nodeb" x="56" y="308">Conversation history</text>
+  <text class="sub" x="56" y="324">turn · part — partitioned</text>
+  <text class="sub" x="56" y="339">hot / warm / cold by recency</text>
+
+  <rect x="42" y="356" width="246" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="56" y="376">Cross-branch summaries</text>
+  <text class="sub" x="56" y="392">branch · summarized turns</text>
+
+  <rect x="42" y="410" width="246" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="56" y="430">Pending state</text>
+  <text class="sub" x="56" y="446">in-flight tool calls · reserve</text>
+
+  <text class="sub" x="42" y="480" fill="#227a86">All rows in one MVCC store — read under one</text>
+  <text class="sub" x="42" y="496" fill="#227a86">snapshot, kept consistent by the framework.</text>
+
+  <!-- ============ CENTER: assembleContext ============ -->
+  <rect x="352" y="26" width="386" height="516" rx="9" fill="#e6f5f7" stroke="#5aa6b0"/>
+  <text class="h" x="370" y="50">assembleContext(session, branch, budget)</text>
+  <text class="title" x="370" y="68">six-phase assembly under a token budget</text>
+
+  <!-- phase pipeline -->
+  <rect x="372" y="86" width="286" height="40" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="num" x="388" y="111">1</text><text class="ph" x="408" y="111">System instructions</text>
+
+  <rect x="372" y="132" width="286" height="40" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="num" x="388" y="157">2</text><text class="ph" x="408" y="157">Permission rules</text>
+
+  <rect x="372" y="178" width="286" height="40" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="num" x="388" y="203">3</text><text class="ph" x="408" y="203">Knowledge  (project + root scope)</text>
+
+  <rect x="372" y="224" width="286" height="40" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="num" x="388" y="249">4</text><text class="ph" x="408" y="249">Tasks</text>
+
+  <rect x="372" y="270" width="286" height="44" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="num" x="388" y="297">5</text><text class="ph" x="408" y="297">History — hot / warm / cold turns</text>
+
+  <rect x="372" y="320" width="286" height="44" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="num" x="388" y="347">6</text><text class="ph" x="408" y="342">Cross-branch summaries ·</text><text class="ph" x="408" y="357">pending state</text>
+
+  <!-- budget gauge -->
+  <rect x="674" y="86" width="46" height="278" rx="6" fill="#f4fbfb" stroke="#8fbfc7"/>
+  <text class="sub" text-anchor="middle" x="697" y="103">budget</text>
+  <rect x="686" y="112" width="22" height="240" rx="4" fill="#ffffff" stroke="#8fbfc7"/>
+  <rect x="686" y="232" width="22" height="120" rx="4" fill="#bfe3e8"/>
+  <text class="sub" text-anchor="middle" x="697" y="368">fills</text>
+
+  <text class="sub" x="372" y="392">Packs newest-first until the budget binds;</text>
+  <text class="sub" x="372" y="408">remainder is summarized or skipped.</text>
+  <text class="sub" x="372" y="424">opts set each phase's share of the budget.</text>
+
+  <rect x="372" y="446" width="346" height="80" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="388" y="470">enforceBudget(scope)</text>
+  <text class="sub" x="388" y="488">prunes oldest sessions when a scope</text>
+  <text class="sub" x="388" y="504">exceeds its storage budget →</text>
+  <text class="mono" x="388" y="520">{ sessionsPruned, bytesFreed }</text>
+
+  <!-- ============ RIGHT: ContextWindow output ============ -->
+  <rect x="782" y="26" width="276" height="516" rx="9" fill="#f7f7fa" stroke="#c4c4ce"/>
+  <text class="h" x="800" y="50" fill="#4a4a5a">ContextWindow  (returned)</text>
+
+  <rect x="800" y="66" width="240" height="150" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="nodeb" x="814" y="88">blocks[]  — typed, ordered</text>
+  <text class="mono" x="814" y="110">type</text>
+  <text class="sub" x="852" y="110">system · permissionRules ·</text>
+  <text class="sub" x="852" y="125">knowledge · tasks · turn ·</text>
+  <text class="sub" x="852" y="140">branchSummary · pending</text>
+  <text class="mono" x="814" y="162">content</text>
+  <text class="mono" x="814" y="180">tokenCount</text>
+  <text class="mono" x="814" y="198">sourceIds</text>
+  <text class="sub" x="880" y="198">(provenance)</text>
+
+  <rect x="800" y="230" width="240" height="96" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="mono" x="814" y="252">totalTokens / budget</text>
+  <text class="mono" x="814" y="274">turnsIncluded</text>
+  <text class="mono" x="814" y="292">turnsSummarized</text>
+  <text class="mono" x="814" y="310">turnsSkipped</text>
+
+  <rect x="800" y="340" width="240" height="110" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="nodeb" x="814" y="362">knowledgeFingerprint</text>
+  <text class="sub" x="814" y="382">stable while the knowledge</text>
+  <text class="sub" x="814" y="398">set is unchanged →</text>
+  <text class="monod" x="814" y="420">reuse prompt prefix /</text>
+  <text class="monod" x="814" y="436">KV cache across turns</text>
+
+  <text class="sub" x="800" y="474" fill="#227a86">The prompt is data with a budget and</text>
+  <text class="sub" x="800" y="490" fill="#227a86">provenance — not a truncated string.</text>
+
+  <!-- flow arrows -->
+  <path class="solid" marker-end="url(#arrow)" d="M308,300 C 330,300 340,240 352,214"/>
+  <path class="solid" marker-end="url(#arrow)" d="M738,214 C 758,214 766,180 782,150"/>
+
+  <!-- ============ BOTTOM: worked example (measured) ============ -->
+  <rect x="22" y="560" width="1036" height="176" rx="9" fill="#fdf9f0" stroke="#e0c78a"/>
+  <text class="title" x="40" y="582">Worked example (§7.2, measured on the published artifact) — 5 knowledge facts, 12 turns; each cell = one turn (filled = included, hollow = skipped)</text>
+
+  <!-- row: budget 200 -->
+  <text class="nodeb" x="44" y="622">budget 200</text>
+  <g>
+    <!-- 3 filled -->
+    <rect x="150" y="608" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="174" y="608" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="198" y="608" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <!-- 9 hollow -->
+    <rect x="222" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="246" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="270" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="294" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="318" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="342" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="366" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="390" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+    <rect x="414" y="608" width="20" height="18" rx="3" fill="#ffffff" stroke="#cbb98f" stroke-dasharray="3 2"/>
+  </g>
+  <text class="mono" x="452" y="622">141 tokens packed · 3 turns included · 9 skipped   — budget binds, oldest history evicted</text>
+
+  <!-- row: budget 1000 -->
+  <text class="nodeb" x="44" y="662">budget 1000</text>
+  <g>
+    <rect x="150" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="174" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="198" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="222" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="246" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="270" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="294" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="318" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="342" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="366" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="390" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="414" y="648" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+  </g>
+  <text class="mono" x="452" y="662">579 tokens packed · 12 turns included · 0 skipped   — all history fits</text>
+
+  <!-- row: budget 4000 -->
+  <text class="nodeb" x="44" y="702">budget 4000</text>
+  <g>
+    <rect x="150" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="174" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="198" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="222" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="246" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="270" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="294" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="318" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="342" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="366" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="390" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+    <rect x="414" y="688" width="20" height="18" rx="3" fill="#bfe3e8" stroke="#2f8f9d"/>
+  </g>
+  <text class="mono" x="452" y="702">579 tokens packed · 12 turns included · 0 skipped   — material, not budget, is now the limit</text>
+
+  <text class="sub" x="44" y="726" fill="#227a86">knowledgeFingerprint identical across repeated calls on the unchanged knowledge set — the reuse signal holds.</text>
+</svg>
