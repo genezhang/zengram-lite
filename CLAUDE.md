@@ -6,16 +6,19 @@ Guidance for Claude Code when working in the **zengram-lite** public-facing repo
 
 zengram-lite is the **public distribution repo** for the WebAssembly build of the
 Zengram agentic-memory framework over the Zeta engine — the in-browser teaser for
-the closed Zengram + Zeta products. The compiled build is **free to use,
-including commercially, but not open source**. It mirrors the `genezhang/zeta-lite`
-distribution pattern: the closed framework/engine stay in private monorepos
-(`genezhang/zengram`, `genezhang/zeta`), and this repo holds the **hand-authored
-surface** plus the mechanics to fetch/run the published binary.
+the Zengram + Zeta products. The compiled build is **free to use, including
+commercially**; the artifact itself is distributed, not open source. It mirrors
+the `genezhang/zeta-lite` distribution pattern: the framework/engine source stay
+in private monorepos (`genezhang/zengram`, `genezhang/zeta`), and this repo holds
+the **hand-authored surface** plus the mechanics to fetch/run the published
+binary. (The **Zengram framework** is planned for open-source release under
+**Apache-2.0**, publication pending; the **Zeta engine** stays closed. Neither
+source lives here regardless.)
 
 **This repo does NOT contain the framework or engine source.** The compiled
 `zengram_wasm_bg.wasm` is built in the monorepo (`crates/zengram-wasm`) and
-published to npm / GitHub Releases. Do not attempt to add engine or framework
-Rust source here.
+attached to a GitHub Release (npm publication pending). Do not attempt to add
+engine or framework Rust source here.
 
 ## The superset bundle
 
@@ -65,5 +68,7 @@ the development home.
 - **Never commit the `.wasm`** or `pkg/`/`pkg-web/` — they're published
   artifacts, gitignored on purpose.
 - **Never push directly to `main`** — feature branch + PR.
-- The framework/engine source is closed and not in this repo; do not add anything
-  that discloses closed internals beyond what the public JS API already exposes.
+- The framework/engine source is not in this repo (the engine stays closed; the
+  framework's open-source release is separate and pending); do not add anything
+  here that discloses engine internals beyond what the public JS API already
+  exposes.
