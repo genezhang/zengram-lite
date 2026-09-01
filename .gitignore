@@ -14,3 +14,16 @@ demo/*.png
 # OS / editor
 .DS_Store
 *.swp
+
+# LaTeX build intermediates (docs/paper/tex). The figure PDFs are committed —
+# arXiv cannot run Chrome/Inkscape, so the vector PDFs built by
+# figures/build-figs.sh are the submission artifacts. The compiled main.pdf and
+# transient aux files are not committed; run `latexmk -pdf main.tex` to rebuild.
+docs/paper/tex/main.pdf
+docs/paper/tex/*.aux
+docs/paper/tex/*.fls
+docs/paper/tex/*.fdb_latexmk
+docs/paper/tex/*.out
+docs/paper/tex/*.toc
+docs/paper/tex/*.bbl
+docs/paper/tex/*.blg
