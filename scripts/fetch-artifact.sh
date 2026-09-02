@@ -2,16 +2,23 @@
 # Fetch the published zengram-lite wasm artifact into demo/pkg-web/.
 #
 # The compiled bundle (zengram_wasm_bg.wasm + wasm-bindgen JS glue) is NOT
-# committed to this repo. It is published to npm as `zengram-lite` and attached
-# to GitHub Releases. This script pulls the web-target build so the demo can run
-# locally without a Rust/wasm toolchain.
+# committed to this repo. It is attached to a GitHub Release (primary channel);
+# npm publication as `zengram-lite` is pending. This script pulls the web-target
+# build so the demo can run locally without a Rust/wasm toolchain.
+#
+# Source resolution (first match wins):
+#   1. ZENGRAM_LITE_PKG=/path/to/pkg-web   — copy from a local build
+#   2. ZENGRAM_LITE_NPM=1                   — pull from npm (once published)
+#   3. otherwise                            — download from the GitHub Release
 #
 # Usage:
-#   ./scripts/fetch-artifact.sh            # latest published npm version
-#   ./scripts/fetch-artifact.sh v0.1.0     # a specific release tag
-#   ZENGRAM_LITE_PKG=/path/to/pkg-web ./scripts/fetch-artifact.sh   # copy from a local build
+#   ./scripts/fetch-artifact.sh               # latest GitHub Release
+#   ./scripts/fetch-artifact.sh v0.1.0        # a specific release tag
+#   ZENGRAM_LITE_NPM=1 ./scripts/fetch-artifact.sh v0.1.0   # from npm instead
+#   ZENGRAM_LITE_PKG=/path/to/pkg-web ./scripts/fetch-artifact.sh   # local build
 #
-# Requires: npm (default path) OR a local pkg-web dir via ZENGRAM_LITE_PKG.
+# Requires: `gh` (default GitHub-Release path) OR npm (ZENGRAM_LITE_NPM=1) OR a
+# local pkg-web dir via ZENGRAM_LITE_PKG.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +46,7 @@ if [[ -n "${ZENGRAM_LITE_PKG:-}" ]]; then
   else
     echo "    (warning: $notices_file not found in build — should ship with the .wasm)" >&2
   fi
-else
+elif [[ -n "${ZENGRAM_LITE_NPM:-}" ]]; then
   ver="${1:-latest}"
   # npm dist-tags use bare versions; strip a leading v from a git-style tag.
   ver="${ver#v}"
@@ -109,6 +116,59 @@ else
     cp "$tmp/package/$notices_file" "$dest/$notices_file"
   else
     echo "    (warning: $notices_file not found in package — should ship with the .wasm)" >&2
+  fi
+else
+  # Default channel: download the web-target assets from the GitHub Release.
+  # npm publication is pending; the Release is the primary distribution point.
+  command -v gh >/dev/null || {
+    echo "!! 'gh' (GitHub CLI) is required to fetch from the Release." >&2
+    echo "   Install it (https://cli.github.com), or use a local build:" >&2
+    echo "     ZENGRAM_LITE_PKG=/path/to/pkg-web $0" >&2
+    echo "   or, once npm is published:  ZENGRAM_LITE_NPM=1 $0 vX.Y.Z" >&2
+    exit 1
+  }
+  repo="${ZENGRAM_LITE_REPO:-genezhang/zengram-lite}"
+  tag="${1:-}"
+  if [[ -z "$tag" ]]; then
+    tag="$(gh release view --repo "$repo" --json tagName -q .tagName 2>/dev/null)"
+    [[ -n "$tag" ]] || { echo "!! no published release found on $repo" >&2; exit 1; }
+    echo "==> latest GitHub Release on $repo: $tag"
+  fi
+  echo "==> downloading zengram-lite $tag assets from $repo (GitHub Release)"
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+
+  # Pull exactly the web-target files (+ notices) attached to the release.
+  patterns=()
+  for f in "${files[@]}" "$notices_file"; do patterns+=(--pattern "$f"); done
+  gh release download "$tag" --repo "$repo" --dir "$tmp" "${patterns[@]}" \
+    || { echo "!! failed to download release assets for $tag from $repo" >&2; exit 1; }
+
+  # Supply-chain integrity: this is a prebuilt engine binary. If
+  # ZENGRAM_LITE_WASM_SHA256 is set, pin the .wasm to that hex digest and fail
+  # closed; otherwise print it so a human / CI can record and compare it.
+  wasm_sha="$(sha256sum "$tmp/zengram_wasm_bg.wasm" | awk '{print $1}')"
+  echo "    zengram_wasm_bg.wasm sha256: $wasm_sha"
+  if [[ -n "${ZENGRAM_LITE_WASM_SHA256:-}" ]]; then
+    if [[ "$wasm_sha" != "$ZENGRAM_LITE_WASM_SHA256" ]]; then
+      echo "!! integrity mismatch — refusing to install." >&2
+      echo "   expected: $ZENGRAM_LITE_WASM_SHA256" >&2
+      echo "   got:      $wasm_sha" >&2
+      exit 1
+    fi
+    echo "    integrity pin OK"
+  else
+    echo "    (set ZENGRAM_LITE_WASM_SHA256 to the release's published digest to fail closed)"
+  fi
+
+  for f in "${files[@]}"; do
+    [[ -f "$tmp/$f" ]] || { echo "!! release asset missing: $f" >&2; exit 1; }
+    cp "$tmp/$f" "$dest/$f"
+  done
+  if [[ -f "$tmp/$notices_file" ]]; then
+    cp "$tmp/$notices_file" "$dest/$notices_file"
+  else
+    echo "    (warning: $notices_file not attached to the release — should ship with the .wasm)" >&2
   fi
 fi
 

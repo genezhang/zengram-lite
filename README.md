@@ -41,12 +41,12 @@ attached to a **GitHub Release** (npm publication pending).
 ## Quick start — run the demo
 
 ```bash
-# 1. Get the wasm artifact into demo/pkg-web/.
-#    npm publication is pending — until it lands, use a local monorepo build:
-ZENGRAM_LITE_PKG=/path/to/pkg-web ./scripts/fetch-artifact.sh
-#    Or, once the package is on npm:
-# ./scripts/fetch-artifact.sh            # latest published npm version
-# ./scripts/fetch-artifact.sh v0.1.0     # a specific version
+# 1. Get the wasm artifact into demo/pkg-web/ from the GitHub Release (needs gh):
+./scripts/fetch-artifact.sh            # latest release
+# ./scripts/fetch-artifact.sh v0.1.0   # a specific release tag
+#    Alternatives:
+# ZENGRAM_LITE_PKG=/path/to/pkg-web ./scripts/fetch-artifact.sh   # a local build
+# ZENGRAM_LITE_NPM=1 ./scripts/fetch-artifact.sh v0.1.0           # from npm (once published)
 
 # 2. Serve the demo (any static server; wasm needs http://, not file://)
 python3 -m http.server -d demo 8080
