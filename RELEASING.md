@@ -60,6 +60,41 @@ git push origin vX.Y.Z
 
 - [ ] Tag is on the intended `main` commit.
 
+### Pin the build provenance (three source repos)
+
+The shipped `.wasm` is **not** built from this repo — it is compiled from
+`crates/zengram-wasm` in the Zeta monorepo, which links three private source
+trees via path deps (`crates/zengram-wasm/Cargo.toml`). The artifact is
+reproducible only from that **triple**, so tag the exact build commit in each
+with a product-scoped tag and record the SHAs.
+
+| Repo | Supplies | Tag |
+|---|---|---|
+| `genezhang/zengram` | `zengram-mem`, `zengram-common` (the memory tier) | `zengram-lite-vX.Y.Z` |
+| `genezhang/zeta` | `zeta-wasm`, `zeta-embedded` (the engine) | `zengram-lite-vX.Y.Z` |
+| `genezhang/zeta-embedded` | `zeta-embedded-api` (shared types) | `zengram-lite-vX.Y.Z` |
+
+```bash
+# From each checkout, tag the commit the release artifact was built from
+# (annotated tags point at the committed HEAD; uncommitted build outputs such
+#  as regenerated static libs are not captured — a clean tree is not required,
+#  but confirm nothing the build consumes is uncommitted):
+for repo in /path/to/zengram /path/to/zeta /path/to/zeta-embedded; do
+  git -C "$repo" tag -a zengram-lite-vX.Y.Z -m "zengram-lite vX.Y.Z source" <build-commit>
+  git -C "$repo" push origin zengram-lite-vX.Y.Z
+done
+
+# Capture the triple for the release notes:
+for repo in /path/to/zengram /path/to/zeta /path/to/zeta-embedded; do
+  printf '%s %s\n' "$(basename "$repo")" "$(git -C "$repo" rev-parse HEAD)"
+done
+```
+
+- [ ] `zengram-lite-vX.Y.Z` pushed on all three source repos (on `genezhang/zeta`
+      it sits alongside that release's `zeta-wasm` tag on the same commit — a
+      product-scoped pointer, not a rebuild).
+- [ ] The three source SHAs recorded for the release notes (§4).
+
 ## 4. Cut the GitHub Release (primary channel)
 
 Attach the **web-target** files so `scripts/fetch-artifact.sh` and the demos
@@ -83,6 +118,16 @@ gh release create vX.Y.Z \
 ```
 
 - [ ] Release published with all five assets attached.
+- [ ] Release notes include a **Build provenance** block with the three source
+      SHAs from §3 (which monorepo commits this artifact was compiled from), e.g.:
+
+      ```
+      Build provenance (source the .wasm was compiled from):
+        genezhang/zengram        <sha>   (zengram-mem, zengram-common)
+        genezhang/zeta           <sha>   (zeta-wasm, zeta-embedded)
+        genezhang/zeta-embedded  <sha>   (zeta-embedded-api)
+      all tagged zengram-lite-vX.Y.Z
+      ```
 - [ ] Record the artifact's integrity for the pin step below
       (`fetch-artifact.sh` prints the SRI when it pulls from npm; for a release
       asset, note the `.wasm` sha256 in the release notes).
