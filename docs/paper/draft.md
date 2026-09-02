@@ -44,10 +44,12 @@ JavaScript. This is a v0.1 preview; §8 states its boundaries plainly.
 
 ## Availability
 
-The compiled zengram-lite bundle is published to npm as `zengram-lite` and attached
-to GitHub Releases; it is free for any use, including commercial, though the
-framework and engine source are closed (the WebAssembly build is *distributed*, not
-open source). The hand-authored surface — three interactive demo pages (an
+The compiled zengram-lite bundle is distributed as a GitHub Release with the
+web-target bundle attached (publication to npm as `zengram-lite` is pending); it is
+free for any use, including commercial. The Zengram framework source is planned for
+open-source release under Apache-2.0 (publication pending); the Zeta engine source
+stays closed, so the WebAssembly build — which links both — is *distributed* as a
+prebuilt binary rather than itself open source. The hand-authored surface — three interactive demo pages (an
 agent-memory demo, the full SQL playground, and a local AI agent that runs its loop,
 tools, and memory in the tab), the API reference, and the smoke/e2e harnesses used
 in this paper — is public at **https://github.com/genezhang/zengram-lite**. Every
@@ -92,7 +94,7 @@ the device, that is the wrong deployment.
 
 We take a different bet. **Zengram-lite** compiles a complete agentic-memory
 framework to WebAssembly and runs it entirely in the tab, over a transactional SQL
-engine that ships in the same artifact. It is the browser form factor of the closed
+engine that ships in the same artifact. It is the browser form factor of the full
 Zengram framework, and it is a **superset** of the zeta-lite database engine [ZL]:
 the glue crate `zengram-wasm` links the engine and the framework into one cdylib, so
 a single `.wasm` exports both the full SQL surface (`ZetaDb`/`ZetaTxn`/`ZetaCursor`)
@@ -124,7 +126,7 @@ prompt — each backed by real tables the framework keeps consistent.
    SQL engine with copy-on-write branching in one ~2.95 MB artifact, with a choice
    of isolated or shared engine, over the zeta-lite core [ZL].
 5. **Position in the Zeta/Zengram family**: the smallest, most complete public form
-   of the closed framework, and the in-browser teaser for it.
+   of the full Zengram framework, and the in-browser teaser for it.
 
 Throughout, the argument is that the missing piece on the client side was never the
 vector index — that part is solved — but the *framework* around it: the lifecycle,
@@ -273,7 +275,7 @@ into one blob. And a substantial set of tables is **compiled in but not yet expo
 as a typed surface (§8): task management, reminders, permission rules, subagent runs,
 a code graph, an object-knowledge format, and fleet/mailbox coordination. That the
 build already carries these — reachable via SQL today, typed later — indicates the
-scope of the closed Zengram framework this teaser fronts. The authoritative,
+scope of the full Zengram framework this teaser fronts. The authoritative,
 always-current table list is in the repository (`docs/engine-modes.md`) and reachable
 at runtime via `db.schema()`; the set grows with the framework, and the reserved-name
 caveat of §6.3 tracks it.
@@ -623,8 +625,9 @@ memory tiers are ordinary tables and queries over that engine.
 
 **Future work** centers on exposing the compiled-in surface (episodic timelines,
 provenance tracing, memory branching) as typed APIs, wiring automatic extraction when
-an async model bridge is available, and — beyond the teaser — the closed Zengram
-framework and Zeta engine this build fronts.
+an async model bridge is available, and — beyond the teaser — the full Zengram
+framework this build fronts (planned for open-source release under Apache-2.0) and
+the closed Zeta engine beneath it.
 
 ## 9. Conclusion
 
@@ -641,7 +644,7 @@ timestamp, and all of it ships in one ~2.95 MB artifact — the whole framework 
 few percent more than the SQL engine alone. The one genuinely new piece of
 engineering the browser forced, the bring-your-own-result seam, is what lets a
 framework built around an LLM run on a surface that cannot call one. Zengram-lite is
-the smallest and most complete public form of the closed Zengram framework, and the
+the smallest and most complete public form of the full Zengram framework, and the
 in-browser teaser for it; the engine beneath it stands on its own in the companion
 report.
 
@@ -649,10 +652,9 @@ report.
 
 ## References
 
-*Draft references. Web sources are dated by access (2026-08-31); replace with
-archival/DOI forms and canonical citations before submission. [ZL] is the companion
-zeta-lite report; the items marked as zengram-lite's own artifacts are reproducible
-from the public repository.*
+*The companion **zeta-lite** report [ZL] is not yet public; its citation is
+provisional and will be finalized on release. The items marked as zengram-lite's own
+artifacts are reproducible from the public repository.*
 
 [ZL] Zeta-Lite: A Concurrent, Branchable In-Browser SQL Database for Agentic Memory.
 Companion technical report, 2026. github.com/genezhang/zeta-lite (`docs/paper/`). The
@@ -661,11 +663,13 @@ copy-on-write branching, snapshot-to-OPFS persistence, the wasm-not-WASI host bi
 and the throughput/concurrency/soak evaluation.
 
 [1] C. Packer, S. Wooders, K. Lin, V. Fang, S. G. Patil, I. Stoica, and J. E.
-Gonzalez. *MemGPT: Towards LLMs as Operating Systems.* 2023. arXiv:2310.08560. See
-also Letta (letta.com), the successor framework.
+Gonzalez. *MemGPT: Towards LLMs as Operating Systems.* arXiv:2310.08560, 2023.
+https://arxiv.org/abs/2310.08560. See also Letta (letta.com), the successor
+framework.
 
-[2] mem0ai. *Mem0 — The Memory Layer for Personalized AI.* github.com/mem0ai/mem0
-(accessed 2026-08-31).
+[2] P. Chhikara, D. Khant, S. Aryan, T. Singh, and D. Yadav. *Mem0: Building
+Production-Ready AI Agents with Scalable Long-Term Memory.* arXiv:2504.19413, 2025.
+https://arxiv.org/abs/2504.19413. Implementation: github.com/mem0ai/mem0.
 
 [3] LangChain (python.langchain.com) and LlamaIndex (llamaindex.ai) — conversational-
 memory and retrieval/context-construction frameworks for LLM applications (accessed

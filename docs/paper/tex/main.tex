@@ -85,10 +85,13 @@ session tracking, provenance.
 \section*{Availability}
 \addcontentsline{toc}{section}{Availability}
 
-The compiled zengram-lite bundle is published to npm as \code{zengram-lite} and
-attached to GitHub Releases; it is free for any use, including commercial, though
-the framework and engine source are closed (the WebAssembly build is
-\emph{distributed}, not open source). The hand-authored surface --- three
+The compiled zengram-lite bundle is distributed as a GitHub Release with the
+web-target bundle attached (publication to npm as \code{zengram-lite} is pending);
+it is free for any use, including commercial. The Zengram framework source is
+planned for open-source release under Apache-2.0 (publication pending); the Zeta
+engine source stays closed, so the WebAssembly build --- which links both --- is
+\emph{distributed} as a prebuilt binary rather than itself open source. The
+hand-authored surface --- three
 interactive demo pages (an agent-memory demo, the full SQL playground, and a
 local AI agent that runs its loop, tools, and memory in the tab), the API
 reference, and the smoke/e2e harnesses used in this paper --- is public at
@@ -134,7 +137,7 @@ data on the device, that is the wrong deployment.
 We take a different bet. \textbf{Zengram-lite} compiles a complete agentic-memory
 framework to WebAssembly and runs it entirely in the tab, over a transactional
 SQL engine that ships in the same artifact. It is the browser form factor of the
-closed Zengram framework, and it is a \textbf{superset} of the zeta-lite database
+full Zengram framework, and it is a \textbf{superset} of the zeta-lite database
 engine~[ZL]: the glue crate \code{zengram-wasm} links the engine and the
 framework into one cdylib, so a single \code{.wasm} exports both the full SQL
 surface (\code{ZetaDb}/\code{ZetaTxn}/\code{ZetaCursor}) and the memory tier
@@ -167,7 +170,7 @@ each backed by real tables the framework keeps consistent.
     artifact, with a choice of isolated or shared engine, over the zeta-lite
     core~[ZL].
   \item \textbf{Position in the Zeta/Zengram family}: the smallest, most complete
-    public form of the closed framework, and the in-browser teaser for it.
+    public form of the full framework, and the in-browser teaser for it.
 \end{enumerate}
 
 Throughout, the argument is that the missing piece on the client side was never
@@ -343,7 +346,7 @@ every table above into one blob. And a substantial set of tables is
 management, reminders, permission rules, subagent runs, a code graph, an
 object-knowledge format, and fleet/mailbox coordination. That the build already
 carries these --- reachable via SQL today, typed later --- indicates the scope of
-the closed Zengram framework this teaser fronts. The authoritative,
+the full Zengram framework this teaser fronts. The authoritative,
 always-current table list is in the repository (\code{docs/engine-modes.md}) and
 reachable at runtime via \code{db.schema()}; the set grows with the framework, and
 the reserved-name caveat of \S6.3 tracks it.
@@ -729,7 +732,8 @@ that engine.
 \textbf{Future work} centers on exposing the compiled-in surface (episodic
 timelines, provenance tracing, memory branching) as typed APIs, wiring automatic
 extraction when an async model bridge is available, and --- beyond the teaser ---
-the closed Zengram framework and Zeta engine this build fronts.
+the full Zengram framework this build fronts (planned for open-source release under
+Apache-2.0) and the closed Zeta engine beneath it.
 
 \section{Conclusion}
 
@@ -746,7 +750,7 @@ for the cost of a timestamp, and all of it ships in one $\sim$2.95\,MB artifact 
 the whole framework for a few percent more than the SQL engine alone. The one
 genuinely new piece of engineering the browser forced, the bring-your-own-result
 seam, is what lets a framework built around an LLM run on a surface that cannot call
-one. Zengram-lite is the smallest and most complete public form of the closed
+one. Zengram-lite is the smallest and most complete public form of the full
 Zengram framework, and the in-browser teaser for it; the engine beneath it stands
 on its own in the companion report.
 
@@ -754,10 +758,9 @@ on its own in the companion report.
 \addcontentsline{toc}{section}{References}
 
 {\small
-\emph{Draft references. Web sources are dated by access (2026-08-31); replace with
-archival/DOI forms and canonical citations before submission. [ZL] is the companion
-zeta-lite report; the items marked as zengram-lite's own artifacts are reproducible
-from the public repository.}
+\emph{The companion zeta-lite report [ZL] is not yet public; its citation is
+provisional and will be finalized on release. The items marked as zengram-lite's own
+artifacts are reproducible from the public repository.}
 
 \begin{description}[leftmargin=3.2em,style=nextline,itemsep=0.3em]
   \item[{[ZL]}] Zeta-Lite: A Concurrent, Branchable In-Browser SQL Database for
@@ -767,10 +770,13 @@ from the public repository.}
     copy-on-write branching, snapshot-to-OPFS persistence, the wasm-not-WASI host
     binding, and the throughput/concurrency/soak evaluation.
   \item[{[1]}] C. Packer, S. Wooders, K. Lin, V. Fang, S. G. Patil, I. Stoica, and
-    J. E. Gonzalez. \emph{MemGPT: Towards LLMs as Operating Systems.} 2023.
-    arXiv:2310.08560. See also Letta (letta.com), the successor framework.
-  \item[{[2]}] mem0ai. \emph{Mem0 --- The Memory Layer for Personalized AI.}
-    \url{https://github.com/mem0ai/mem0} (accessed 2026-08-31).
+    J. E. Gonzalez. \emph{MemGPT: Towards LLMs as Operating Systems.}
+    arXiv:2310.08560, 2023. \url{https://arxiv.org/abs/2310.08560}. See also Letta
+    (letta.com), the successor framework.
+  \item[{[2]}] P. Chhikara, D. Khant, S. Aryan, T. Singh, and D. Yadav. \emph{Mem0:
+    Building Production-Ready AI Agents with Scalable Long-Term Memory.}
+    arXiv:2504.19413, 2025. \url{https://arxiv.org/abs/2504.19413}. Implementation:
+    \url{https://github.com/mem0ai/mem0}.
   \item[{[3]}] LangChain (python.langchain.com) and LlamaIndex (llamaindex.ai) ---
     conversational-memory and retrieval/context-construction frameworks for LLM
     applications (accessed 2026-08-31).
