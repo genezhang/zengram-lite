@@ -15,10 +15,13 @@ this distribution, and a few narrow restrictions apply (see RESTRICTIONS
 below).
 
 This license covers the compiled Zengram Lite artifact and the hand-authored
-materials distributed with it. The framework and engine source code live in
-separate, closed repositories and are available only to parties under a
-separate Non-Disclosure Agreement and arrangement; nothing here grants access
-to that source.
+materials distributed with it — not the source code of the framework or engine.
+The Zengram framework source is planned for separate release as open source
+under the Apache License 2.0 (publication pending); the Zeta engine source
+remains closed and is available only to parties under a separate Non-Disclosure
+Agreement and arrangement. Whichever the status of that source, the compiled
+artifact is distributed under this license, and nothing here grants access to
+engine source or governs the framework's separate open-source release.
 
 ────────────────────────────────────────────────────────────────────────────
 

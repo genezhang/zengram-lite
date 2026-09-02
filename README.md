@@ -6,10 +6,12 @@ embedded [Zeta](https://github.com/genezhang/zeta) database engine. An agent
 running in a browser tab can **remember** facts and **recall** them by meaning —
 fully client-side, no server, no network.
 
-> **Free to use, including commercially — but not open source.** This repo is the
-> public distribution mirror: the hand-authored demo plus the mechanics to
-> fetch/run the published `.wasm`. The framework and engine source live in
-> separate closed repositories. See [LICENSE](./LICENSE).
+> **Free to use, including commercially.** This repo is the public distribution
+> mirror: the hand-authored demo plus the mechanics to fetch/run the published
+> `.wasm`. The **Zengram framework** source is planned for open-source release
+> under **Apache-2.0** (publication pending); the **Zeta engine** stays closed.
+> The shipped `.wasm` links both, so it is distributed as a prebuilt binary. See
+> [LICENSE](./LICENSE).
 
 - **Semantic memory** — hybrid vector + full-text recall over a local store.
 - **Superset bundle** — the same `.wasm` also carries the full
@@ -30,18 +32,22 @@ fully client-side, no server, no network.
   `build-from-source.sh` (rebuild from the monorepo; maintainers only).
 - `docs/` — [API reference](./docs/api.md), [how the memory works](./docs/how-it-works.md), and [engine modes](./docs/engine-modes.md).
 - `examples/` — [hello.mjs](./examples/hello.mjs), a minimal runnable tour of the memory tier (Node).
-- `LICENSE` — Zengram Lite License (free commercial use; not open source).
+- `LICENSE` — Zengram Lite License (free for any use, including commercial; the
+  compiled artifact is distributed, not itself open source).
 
 **This repo does not contain the framework or engine source.** The compiled
 `zengram_wasm_bg.wasm` is built in the monorepo (`crates/zengram-wasm`) and
-published to npm / GitHub Releases.
+attached to a **GitHub Release** (npm publication pending).
 
 ## Quick start — run the demo
 
 ```bash
-# 1. Fetch the published wasm artifact into demo/pkg-web/
-./scripts/fetch-artifact.sh            # latest published npm version
-# ./scripts/fetch-artifact.sh v0.1.0   # a specific release tag
+# 1. Get the wasm artifact into demo/pkg-web/.
+#    npm publication is pending — until it lands, use a local monorepo build:
+ZENGRAM_LITE_PKG=/path/to/pkg-web ./scripts/fetch-artifact.sh
+#    Or, once the package is on npm:
+# ./scripts/fetch-artifact.sh            # latest published npm version
+# ./scripts/fetch-artifact.sh v0.1.0     # a specific version
 
 # 2. Serve the demo (any static server; wasm needs http://, not file://)
 python3 -m http.server -d demo 8080
@@ -154,12 +160,13 @@ fact-extraction and reflection are bring-your-own-result — call your completio
 model in JS, then hand the results to `extractWithFacts` / `reflectWithInsights`
 (see [docs/api.md](./docs/api.md)).
 
-The Zengram framework is open source (publication pending) — only the Zeta
-engine is closed, like Zengram itself. The zengram-lite `.wasm` is a prebuilt
-binary linking both (built from `zeta-wasm` + `zengram-wasm` in the monorepo),
-so it is distributed as an artifact rather than built from public source.
-Until the framework repo is public, [docs/how-it-works.md](./docs/how-it-works.md)
-documents the memory tier's behavior.
+The Zengram framework is planned for open-source release under **Apache-2.0**
+(publication pending) — only the Zeta engine stays closed. The zengram-lite
+`.wasm` is a prebuilt binary linking both (built from `zeta-wasm` +
+`zengram-wasm` in the monorepo), so it is distributed as an artifact rather than
+built from public source. Until the framework repo is public,
+[docs/how-it-works.md](./docs/how-it-works.md) documents the memory tier's
+behavior.
 
 ## License
 

@@ -5,10 +5,10 @@ the Zeta database engine that runs entirely inside the browser (or a JS runtime)
 — in the page's own sandbox, with no server and no network. Its security posture
 is shaped around being a well-behaved client-side guest.
 
-> Zengram Lite is free to use but not open source; the framework and engine
-> source are not in this repo. Please report vulnerabilities privately (see
-> below) rather than in public issues, so a fix can ship before details are
-> public.
+> Zengram Lite is free to use; the framework and engine source are not in this
+> repo (the shipped `.wasm` is a prebuilt binary). Please report vulnerabilities
+> privately (see below) rather than in public issues, so a fix can ship before
+> details are public.
 
 ## Reporting a Vulnerability
 
