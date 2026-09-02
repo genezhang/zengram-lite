@@ -114,7 +114,8 @@ embodiment, and functional coverage against the published artifact. v0.1 preview
   4. The **superset** embodiment — memory + full SQL engine + branching in one
      ~2.95 MB `.wasm`, over the zeta-lite engine [ZL], with own-vs-shared engine
      modes.
-  5. Position in the Zeta/Zengram family and the closed products it teases.
+  5. Position in the Zeta/Zengram family and the wider products it teases (the
+     Zengram framework, Apache-2.0 pending; the Zeta engine, closed).
 
 ## 2. Background & Related Work
 - **Agent-memory systems**: mem0, MemGPT/Letta, LangChain/LlamaIndex memory —
@@ -282,8 +283,8 @@ artifact; reproducible from the public repo.)*
   zeta-lite's [ZL]; this paper does not add framework micro-benchmarks. Stated
   plainly.
 - **Future work**: the wider typed surface, auto-extraction when an async bridge
-  lands, memory branching exposed, and the closed Zengram/Zeta products this
-  teaser fronts.
+  lands, memory branching exposed, and the wider Zengram framework (Apache-2.0
+  pending) and closed Zeta engine this teaser fronts.
 
 ## 9. Conclusion
 The client side has had vector stores but not a *memory framework*. Zengram-lite
@@ -292,7 +293,7 @@ token-budgeted context assembly — in a single ~2.95 MB artifact that also carr
 a full transactional SQL engine with branching. Because it sits on the zeta-lite
 engine [ZL], it gets consistency and branchable state for free; because it resolves
 the sync-wasm/async-LLM seam with bring-your-own-result, the whole framework runs
-in the tab. It is the smallest, most complete form of the closed Zengram framework,
+in the tab. It is the smallest, most complete form of the full Zengram framework,
 and the in-browser teaser for it.
 
 ---
