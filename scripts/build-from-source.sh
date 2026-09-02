@@ -71,5 +71,18 @@ rm -rf "$dest/pkg"; wasm-bindgen --target nodejs --out-dir "$dest/pkg" "$wasm"
 printf '{\n  "type": "commonjs"\n}\n' > "$dest/pkg/package.json"
 printf '{\n  "type": "module"\n}\n' > "$dest/pkg-web/package.json"
 
+# THIRD-PARTY-NOTICES.txt is a required release asset (cargo-about-generated in
+# the monorepo from the wasm32 dependency graph). wasm-bindgen doesn't emit it,
+# so copy it alongside the web bundle — the release attaches pkg-web/ as-is.
+notices="$crate/THIRD-PARTY-NOTICES.txt"
+if [[ -f "$notices" ]]; then
+  cp "$notices" "$dest/pkg-web/THIRD-PARTY-NOTICES.txt"
+  echo "==> copied THIRD-PARTY-NOTICES.txt -> $dest/pkg-web/"
+else
+  echo "!! THIRD-PARTY-NOTICES.txt not found at $notices" >&2
+  echo "   regenerate it in the monorepo (cargo about generate) before releasing;" >&2
+  echo "   it is a required release asset (see RELEASING.md)." >&2
+fi
+
 echo "==> done. Serve demo over HTTP (python3 -m http.server -d demo 8080), or:"
 echo "    node demo/smoke.mjs"
