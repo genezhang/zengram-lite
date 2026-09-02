@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1000" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7.5,3 L0,6 z" fill="#333"/>
+    </marker>
+    <marker id="byorarrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7.5,3 L0,6 z" fill="#2f8f9d"/>
+    </marker>
+    <marker id="caparrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7.5,3 L0,6 z" fill="#7a5aa8"/>
+    </marker>
+    <style>
+      .title{font-size:12.5px;fill:#4a4a5a;font-style:italic}
+      .node{font-size:12.5px;fill:#1f2430}
+      .nodeb{font-size:13px;fill:#1f2430;font-weight:600}
+      .elab{font-size:11px;fill:#6a5a8a}
+      .elabt{font-size:11px;fill:#227a86;font-weight:600}
+      .elabk{font-size:11px;fill:#3a3a46;font-weight:600}
+      .zl{font-size:11px;fill:#2f7a2f;font-weight:700}
+      .leg{font-size:11.5px;fill:#555}
+      .solid{fill:none;stroke:#333;stroke-width:1.7}
+      .assoc{fill:none;stroke:#8a8a96;stroke-width:1.3;stroke-dasharray:3 3}
+      .byor{fill:none;stroke:#2f8f9d;stroke-width:1.6;stroke-dasharray:6 4}
+      .cap{fill:none;stroke:#7a5aa8;stroke-width:1.5;stroke-dasharray:6 4}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="1000" fill="#ffffff"/>
+
+  <!-- ============ BAND 1: BROWSER HOST ============ -->
+  <rect x="20" y="26" width="1040" height="272" rx="9" fill="#f4f8ff" stroke="#b9cdec"/>
+  <text class="title" x="40" y="48">Browser host (main thread, JavaScript) — the driver</text>
+
+  <!-- Application node -->
+  <rect x="48" y="100" width="252" height="96" rx="6" fill="#fdf1da" stroke="#cf9a3c"/>
+  <text class="nodeb" text-anchor="middle" x="174" y="134">Application / AI agent</text>
+  <text class="node" text-anchor="middle" x="174" y="156">one import → one engine</text>
+  <text class="node" text-anchor="middle" x="174" y="174">(superset bundle)</text>
+
+  <!-- Application-provided model side + host Web platform -->
+  <rect x="340" y="72" width="700" height="204" rx="8" fill="#eaf1fd" stroke="#86a6dd"/>
+  <text class="title" x="360" y="96">Application-provided model side (JS) · host Web platform</text>
+
+  <rect x="360" y="150" width="236" height="104" rx="6" fill="#d9e6fb" stroke="#3f6fc0"/>
+  <text class="nodeb" text-anchor="middle" x="478" y="186">Embedding model</text>
+  <text class="node" text-anchor="middle" x="478" y="206">transformers.js ·</text>
+  <text class="node" text-anchor="middle" x="478" y="224">ORT-Web · /v1</text>
+
+  <rect x="612" y="150" width="214" height="104" rx="6" fill="#d9e6fb" stroke="#3f6fc0"/>
+  <text class="nodeb" text-anchor="middle" x="719" y="186">Completion LLM</text>
+  <text class="node" text-anchor="middle" x="719" y="206">OpenAI-compatible</text>
+  <text class="node" text-anchor="middle" x="719" y="224">extract · reflect</text>
+
+  <rect x="842" y="150" width="180" height="104" rx="6" fill="#d9e6fb" stroke="#3f6fc0"/>
+  <text class="nodeb" text-anchor="middle" x="932" y="186">OPFS</text>
+  <text class="node" text-anchor="middle" x="932" y="206">navigator.storage</text>
+  <text class="node" text-anchor="middle" x="932" y="224">(snapshot store)</text>
+
+  <!-- ============ BAND 2: BINDING LAYER ============ -->
+  <rect x="20" y="334" width="1040" height="70" rx="9" fill="#f3ecfc" stroke="#a487d4"/>
+  <text class="title" x="40" y="356">wasm-bindgen binding layer (--target web) — JS glue + injected host imports · the only boundary crossing</text>
+  <rect x="390" y="358" width="300" height="42" rx="6" fill="#e7d8fa" stroke="#8a63c7"/>
+  <text class="nodeb" text-anchor="middle" x="540" y="384">JS glue + host imports</text>
+
+  <!-- ============ BAND 3: WASM SANDBOX ============ -->
+  <rect x="20" y="440" width="1040" height="520" rx="9" fill="#f7f7fa" stroke="#c4c4ce"/>
+  <text class="title" x="40" y="462">WebAssembly sandbox — one .wasm (zengram-wasm links zeta-wasm + framework) · wasm32-unknown-unknown · single thread</text>
+
+  <!-- Two exported API surfaces (superset) -->
+  <rect x="64" y="488" width="344" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="node" text-anchor="middle" x="236" y="516">ZengramMemory — agentic-memory API</text>
+  <rect x="648" y="488" width="352" height="46" rx="6" fill="#ffffff" stroke="#9aa0aa"/>
+  <text class="node" text-anchor="middle" x="824" y="516">ZetaDb · ZetaTxn · ZetaCursor — SQL API</text>
+
+  <!-- Zengram framework group (teal — the new layer this paper is about) -->
+  <rect x="48" y="560" width="560" height="212" rx="8" fill="#e6f5f7" stroke="#5aa6b0"/>
+  <text class="title" x="68" y="583">Zengram framework (this paper)</text>
+
+  <rect x="62" y="596" width="170" height="104" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="nodeb" text-anchor="middle" x="147" y="620">Knowledge tier</text>
+  <text class="node" text-anchor="middle" x="147" y="642">knowledge · embedding</text>
+  <text class="node" text-anchor="middle" x="147" y="660">recall (vector+FTS)</text>
+  <text class="node" text-anchor="middle" x="147" y="678">confidence · decay</text>
+
+  <rect x="248" y="596" width="170" height="104" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="nodeb" text-anchor="middle" x="333" y="620">Session tracking</text>
+  <text class="node" text-anchor="middle" x="333" y="642">session · turn</text>
+  <text class="node" text-anchor="middle" x="333" y="660">part · tool_call</text>
+  <text class="node" text-anchor="middle" x="333" y="678">provenance</text>
+
+  <rect x="434" y="596" width="160" height="104" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="nodeb" text-anchor="middle" x="514" y="620">Context assembly</text>
+  <text class="node" text-anchor="middle" x="514" y="642">6-phase</text>
+  <text class="node" text-anchor="middle" x="514" y="660">token budget</text>
+  <text class="node" text-anchor="middle" x="514" y="678">fingerprint</text>
+
+  <rect x="62" y="714" width="532" height="44" rx="6" fill="#ffffff" stroke="#2f8f9d"/>
+  <text class="node" text-anchor="middle" x="328" y="741">Bring-your-own-result bridges — rememberWithVector · extractWithFacts · reflectWithInsights</text>
+
+  <!-- Zeta engine core group (green — shared with the server build; detailed in [ZL]) -->
+  <rect x="48" y="800" width="700" height="138" rx="8" fill="#edf7ed" stroke="#7cbb7c"/>
+  <text class="title" x="68" y="822">Zeta engine core — shared with the server build; detailed in the zeta-lite report</text>
+  <rect x="690" y="808" width="46" height="18" rx="9" fill="#e2f2e2" stroke="#7cbb7c"/>
+  <text class="zl" text-anchor="middle" x="713" y="821">ZL</text>
+  <text class="elab" text-anchor="middle" x="398" y="841" fill="#3a3a46">Memory backend: in-linear-memory tables + catalog — every framework table lives here</text>
+
+  <rect x="64" y="852" width="196" height="48" rx="6" fill="#ffffff" stroke="#3f9a3f"/>
+  <text class="node" text-anchor="middle" x="162" y="873">Parser → Planner</text>
+  <text class="node" text-anchor="middle" x="162" y="889">→ Executor</text>
+
+  <rect x="272" y="852" width="168" height="48" rx="6" fill="#ffffff" stroke="#3f9a3f"/>
+  <text class="nodeb" text-anchor="middle" x="356" y="873">Log-centric MVCC</text>
+  <text class="node" text-anchor="middle" x="356" y="889">SI · versioned rows</text>
+
+  <rect x="452" y="852" width="118" height="48" rx="6" fill="#ffffff" stroke="#3f9a3f"/>
+  <text class="node" text-anchor="middle" x="511" y="873">HNSW + FTS</text>
+  <text class="node" text-anchor="middle" x="511" y="889">indexes</text>
+
+  <rect x="582" y="852" width="154" height="48" rx="6" fill="#ffffff" stroke="#3f9a3f"/>
+  <text class="nodeb" text-anchor="middle" x="659" y="873">Branching</text>
+  <text class="node" text-anchor="middle" x="659" y="889">fork timestamps</text>
+
+  <!-- Snapshot codec (tan IO) -->
+  <rect x="772" y="852" width="214" height="64" rx="6" fill="#fdf1da" stroke="#cf9a3c"/>
+  <text class="nodeb" text-anchor="middle" x="879" y="880">Snapshot codec</text>
+  <text class="node" text-anchor="middle" x="879" y="900">export / openFromSnapshot</text>
+
+  <!-- ============ SOLID: API / data path ============ -->
+  <path class="solid" marker-end="url(#arrow)" d="M174,196 C 250,300 410,338 503,357"/>
+  <path class="solid" marker-end="url(#arrow)" d="M470,400 C 360,440 280,468 238,485"/>
+  <path class="solid" marker-end="url(#arrow)" d="M610,400 C 720,440 800,468 823,485"/>
+  <path class="solid" marker-end="url(#arrow)" d="M236,534 C 236,546 270,552 298,558"/>
+  <path class="solid" marker-end="url(#arrow)" d="M824,534 C 824,650 760,742 703,799"/>
+  <path class="solid" marker-end="url(#arrow)" d="M328,758 L319,799"/>
+  <path class="solid" marker-end="url(#arrow)" d="M736,880 L770,885"/>
+
+  <!-- ============ DASHED TEAL: bring-your-own-result seam ============ -->
+  <path class="byor" marker-end="url(#byorarrow)" d="M478,254 C 360,440 90,600 61,730"/>
+  <path class="byor" marker-end="url(#byorarrow)" d="M719,254 C 660,460 620,620 596,732"/>
+
+  <!-- ============ DASHED PURPLE: snapshot persistence ============ -->
+  <path class="cap" marker-end="url(#caparrow)" d="M879,852 C 992,700 992,360 932,256"/>
+
+  <!-- ============ edge labels ============ -->
+  <rect x="286" y="288" width="150" height="20" rx="10" fill="#ffffff" stroke="#e0e0e8"/>
+  <text class="elabk" text-anchor="middle" x="361" y="302">imports zengram-lite</text>
+
+  <rect x="716" y="640" width="120" height="19" rx="9" fill="#ffffff" stroke="#e0e0e8"/>
+  <text class="elabk" text-anchor="middle" x="776" y="654">re-exported engine</text>
+
+  <text class="elabt" text-anchor="middle" x="333" y="786">framework runs as tables + queries on the engine</text>
+
+  <rect x="900" y="536" width="118" height="19" rx="9" fill="#f3ecfc"/>
+  <text class="elab" text-anchor="middle" x="959" y="550">snapshot blob (bytes)</text>
+
+  <rect x="150" y="540" width="98" height="18" rx="9" fill="#ffffff" stroke="#bfe3e8"/>
+  <text class="elabt" text-anchor="middle" x="199" y="553" fill="#227a86">finished vectors</text>
+  <rect x="636" y="612" width="150" height="18" rx="9" fill="#ffffff" stroke="#bfe3e8"/>
+  <text class="elabt" text-anchor="middle" x="711" y="625" fill="#227a86">extracted facts / insights</text>
+
+  <!-- ============ legend ============ -->
+  <line class="solid" x1="40" y1="978" x2="72" y2="978" marker-end="url(#arrow)"/>
+  <text class="leg" x="80" y="982">API / data path</text>
+  <line class="byor" x1="228" y1="978" x2="260" y2="978" marker-end="url(#byorarrow)"/>
+  <text class="leg" x="268" y="982">bring-your-own-result seam — async model result (JS) crosses into the sync framework</text>
+  <line class="cap" x1="770" y1="978" x2="802" y2="978" marker-end="url(#caparrow)"/>
+  <text class="leg" x="810" y="982">snapshot → OPFS</text>
+</svg>
