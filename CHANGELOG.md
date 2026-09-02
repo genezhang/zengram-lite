@@ -82,4 +82,16 @@ zengram-lite `.wasm` links both and is therefore distributed as a prebuilt
 binary; see [LICENSE](./LICENSE) (Zengram Lite License — free for any use,
 including commercial).
 
+### Build provenance
+
+The `.wasm` is compiled from `crates/zengram-wasm` in the Zeta monorepo, which
+links three private source trees via path deps. The v0.1.0 artifact is built
+from these commits, each tagged `zengram-lite-v0.1.0`:
+
+| Source repo | Supplies | Commit |
+|---|---|---|
+| `genezhang/zengram` | `zengram-mem`, `zengram-common` (memory tier) | `8db91ce` |
+| `genezhang/zeta` | `zeta-wasm`, `zeta-embedded` (engine) | `ab0ba01b` |
+| `genezhang/zeta-embedded` | `zeta-embedded-api` (shared types) | `8f72971` |
+
 [0.1.0]: https://github.com/genezhang/zengram-lite/releases/tag/v0.1.0
