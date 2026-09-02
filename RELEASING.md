@@ -128,9 +128,11 @@ gh release create vX.Y.Z \
         genezhang/zeta-embedded  <sha>   (zeta-embedded-api)
       all tagged zengram-lite-vX.Y.Z
       ```
-- [ ] Record the artifact's integrity for the pin step below
-      (`fetch-artifact.sh` prints the SRI when it pulls from npm; for a release
-      asset, note the `.wasm` sha256 in the release notes).
+- [ ] Record the artifact's integrity for the pin step below. The `.wasm`
+      sha256 goes in the release notes so downstreams can set
+      `ZENGRAM_LITE_WASM_SHA256` and have `fetch-artifact.sh` fail closed on a
+      mismatch (`sha256sum pkg-web/zengram_wasm_bg.wasm`). On the npm path,
+      `fetch-artifact.sh` also prints the tarball's `sha512-…` SRI.
 
 ## 5. npm publication (follow-up channel — optional at v0.1.0)
 
@@ -141,13 +143,13 @@ you do publish:
       allowlist for the bundle + notices, set `main`/`types`/`exports`.
 - [ ] `npm publish --access public` (dry-run first: `npm publish --dry-run`).
 - [ ] `npm view zengram-lite version` matches `X.Y.Z`.
-- [ ] Re-run `./scripts/fetch-artifact.sh X.Y.Z` (npm path) and record the
-      published `integrity` (`sha512-…`) so downstreams can pin
+- [ ] Re-run `ZENGRAM_LITE_NPM=1 ./scripts/fetch-artifact.sh X.Y.Z` (npm path)
+      and record the published `integrity` (`sha512-…`) so downstreams can pin
       `ZENGRAM_LITE_SHA512`.
 
 ## 6. Post-release
 
-- [ ] `./scripts/fetch-artifact.sh vX.Y.Z` (release path) produces a runnable
-      `demo/pkg-web/` on a clean checkout.
+- [ ] `./scripts/fetch-artifact.sh vX.Y.Z` (default GitHub-Release path, needs
+      `gh`) produces a runnable `demo/pkg-web/` on a clean checkout.
 - [ ] Skim the three demos against the released bundle.
 - [ ] Open the next `## [Unreleased]` section in `CHANGELOG.md` if continuing.
