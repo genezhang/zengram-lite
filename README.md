@@ -1,8 +1,7 @@
 # zengram-lite
 
 **Agentic memory for AI agents, in the browser.** A WebAssembly build of the
-[Zengram](https://github.com/genezhang/zengram) memory framework over the
-embedded [Zeta](https://github.com/genezhang/zeta) database engine. An agent
+**Zengram** memory framework over the embedded **Zeta** database engine. An agent
 running in a browser tab can **remember** facts and **recall** them by meaning —
 fully client-side, no server, no network.
 

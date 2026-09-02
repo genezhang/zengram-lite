@@ -4,7 +4,7 @@ A tiny agent with **persistent, semantic memory**, running entirely in a browser
 tab. Tell it facts; ask it questions; it recalls the relevant memories by
 *meaning*, not keywords. No server, no backend.
 
-This is [zengram](https://github.com/genezhang/zengram)'s memory tier
+This is **zengram**'s memory tier
 (`remember` / `recall`) compiled to WebAssembly over the Zeta engine, with a real
 sentence-embedding model (all-MiniLM-L6-v2) running in the same tab via
 [Transformers.js](https://github.com/huggingface/transformers.js).
