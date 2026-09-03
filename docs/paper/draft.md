@@ -652,12 +652,12 @@ report.
 
 ## References
 
-*The companion **zeta-lite** report [ZL] is not yet public; its citation is
-provisional and will be finalized on release. The items marked as zengram-lite's own
-artifacts are reproducible from the public repository.*
+*The items marked as zengram-lite's own artifacts are reproducible from the public
+repository.*
 
-[ZL] Zeta-Lite: A Concurrent, Branchable In-Browser SQL Database for Agentic Memory.
-Companion technical report, 2026. github.com/genezhang/zeta-lite (`docs/paper/`). The
+[ZL] G. Zhang. *Zeta-Lite: A Concurrent, Branchable In-Browser SQL Database for
+Agentic Memory.* arXiv:2609.01818, 2026. https://arxiv.org/abs/2609.01818.
+Repository: github.com/genezhang/zeta-lite. The
 account of the engine underneath zengram-lite — MVCC, overlapping snapshot isolation,
 copy-on-write branching, snapshot-to-OPFS persistence, the wasm-not-WASI host binding,
 and the throughput/concurrency/soak evaluation.
